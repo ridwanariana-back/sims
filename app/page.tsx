@@ -1,65 +1,100 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import React, { useState } from 'react';
+import Image from 'next/image'; // Gunakan next/image untuk optimasi otomatis
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
+
+export default function LoginPage() {
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    setIsLoading(false);
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-8">
+      <div className="w-full max-w-md space-y-6 rounded-xl bg-white p-8 shadow-xl">
+        
+        {/* Header Section */}
+        <div className="text-center space-y-4">
+          <h3 className="text-2xl font-bold tracking-tight text-gray-900 md:text-3xl">
+            Sistem Informasi Manajemen Sekolah
+          </h3>
+
+          {/* Container Logo */}
+          <div className="flex justify-center">
+            <div className="relative h-32 w-32 md:h-40 md:w-40"> 
+              <Image 
+                src="/hero.jpg" // Pastikan file ada di folder public/hero.jpg
+                alt="Logo SMAN 1 Pemulutan Selatan"
+                fill
+                priority
+                className="object-contain"
+              />
+            </div>
+          </div>
+
+          <p className="text-lg font-medium text-gray-600">
+            Silakan masuk ke akun Anda
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        
+        {/* Form Section */}
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700">Username</label>
+              <input 
+                type="text" 
+                required 
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all" 
+                placeholder="Username Anda"
+              />
+            </div>
+            
+            <div className="relative">
+              <label className="block text-sm font-semibold text-gray-700">Password</label>
+              <input 
+                type={showPassword ? "text" : "password"} 
+                required 
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all" 
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-[38px] text-gray-400 hover:text-blue-600 transition-colors"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
+          </div>
+
+          <button 
+            type="submit" 
+            disabled={isLoading}
+            className="flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-md hover:bg-blue-700 active:scale-[0.98] disabled:opacity-70 transition-all"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Memproses...
+              </>
+            ) : (
+              "Sign In"
+            )}
+          </button>
+        </form>
+
+        {/* Footer Kecil (Opsional) */}
+        <p className="text-center text-xs text-gray-400">
+          &copy; 2026 SMAN 1 Pemulutan Selatan
+        </p>
+      </div>
+    </main>
   );
 }
