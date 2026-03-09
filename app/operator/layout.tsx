@@ -2,19 +2,22 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation'; // Import ini untuk deteksi URL
+import { usePathname } from 'next/navigation';
 import Image from 'next/image';
+import { handleLogout } from '@/lib/actions';
+import { useSession } from 'next-auth/react';
 
 export default function OperatorLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { data: session } = useSession();
   const [isOpen, setIsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const pathname = usePathname(); // Ambil path saat ini
+  const pathname = usePathname();
 
-  // Helper function untuk menentukan class active
+  // Helper function untuk menentukan class active pada sidebar
   const getLinkStyle = (path: string) => {
     const isActive = pathname === path;
     return `block px-4 py-2 rounded-lg transition-all duration-200 ${
@@ -35,7 +38,6 @@ export default function OperatorLayout({
       `}>
         <div className="p-6 flex flex-col items-center border-b border-slate-800">
           <div className="flex w-full justify-between items-center md:justify-center">
-            {/* Logo kecil di sidebar */}
             <div className="flex items-center gap-2">
               <div className="relative h-8 w-8">
                 <Image src="/hero.jpg" alt="Logo" fill className="object-contain" />
@@ -61,7 +63,7 @@ export default function OperatorLayout({
         </nav>
       </aside>
 
-      {/* --- OVERLAY SIDEBAR --- */}
+      {/* --- OVERLAY SIDEBAR (Mobile) --- */}
       {isOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 md:hidden" 
@@ -95,12 +97,35 @@ export default function OperatorLayout({
               className="flex items-center gap-3 p-1 rounded-full hover:bg-gray-50 transition border border-transparent hover:border-gray-200"
             >
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-bold leading-none">Operator SIMS</p>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600 mt-1">Status: Online</p>
+                <p className="text-sm font-bold leading-none">
+                  {session?.user?.name || 'Operator SIMS'}
+                </p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600 mt-1">
+                  Status: Online
+                </p>
               </div>
-              <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-blue-600 to-blue-400 border-2 border-white shadow-md flex items-center justify-center text-white font-bold">
-                OS
-              </div>
+
+              {/* Avatar Dinamis */}
+              {/* Ganti bagian pengecekan image menjadi seperti ini */}
+<div className="h-9 w-9 rounded-full relative overflow-hidden border-2 border-white shadow-md bg-blue-600 flex items-center justify-center text-white font-bold">
+  {session?.user?.image ? (
+    <Image 
+      // Tambahkan prefix /profil/ di depan nama file dari database
+      src={`/profil/${session.user.image}`} 
+      alt="Profile" 
+      fill 
+      className="object-cover"
+    />
+  ) : (
+    // Fallback jika image benar-benar null/undefined
+    <Image 
+      src="/profil/default.png" 
+      alt="Profile Default" 
+      fill 
+      className="object-cover"
+    />
+  )}
+</div>
             </button>
 
             {isProfileOpen && (
@@ -108,19 +133,24 @@ export default function OperatorLayout({
                 <div className="fixed inset-0 z-10" onClick={() => setIsProfileOpen(false)}></div>
                 <div className="absolute right-0 mt-3 w-52 bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-20 animate-in fade-in zoom-in duration-150">
                    <div className="px-4 py-2 border-b border-gray-50 mb-1">
-                    <p className="text-xs text-gray-400">Masuk sebagai</p>
-                    <p className="text-sm font-bold truncate">operator@sekolah.id</p>
+                    <p className="text-xs text-gray-400">Role Anda</p>
+                    <p className="text-sm font-bold truncate text-blue-600 capitalize">
+                      {session?.user?.role || 'User'}
+                    </p>
                   </div>
                   <Link 
-                    href="/operator/profile" 
+                    href="/operator/profil" 
+                    onClick={() => setIsProfileOpen(false)}
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                   >
                     Profil Saya
                   </Link>
                   <hr className="my-1 border-gray-100" />
                   <button 
-                    onClick={() => window.location.href = '/'} // Redirect ke login
-                    className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium"
+                    onClick={async () => {
+                      await handleLogout();
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium transition-colors"
                   >
                     Keluar Sistem
                   </button>
