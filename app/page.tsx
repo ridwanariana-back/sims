@@ -21,7 +21,7 @@ export default function LoginPage() {
       const result = await authenticate(formData);
       
       // Jika authenticate mengembalikan string (pesan error)
-      if (result) {
+      if (typeof result === 'string') {
         setErrorMessage(result);
         setIsLoading(false); // Matikan loading hanya jika ada error
       } else {
