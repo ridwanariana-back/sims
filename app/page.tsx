@@ -25,15 +25,15 @@ export default function LoginPage() {
         setErrorMessage(result);
         setIsLoading(false); // Matikan loading hanya jika ada error
       } else {
-        // Jika berhasil, arahkan ke dashboard operator
-        // Jangan set isLoading(false) agar tombol tetap loading saat transisi halaman
-        router.push('/operator');
+        // 1. Paksa browser membuang cache lama (Hapus status 'Guest')
+        router.refresh(); 
+        
+        // 2. Arahkan ke halaman tujuan
+        // Gunakan '/operator' atau biarkan middleware yang bekerja
+        window.location.href = '/';
       }
     } catch (error: any) {
-      // Menangani error internal Next.js (seperti redirect)
-      if (error.message === 'NEXT_REDIRECT') {
-        return; 
-      }
+      
       
       setErrorMessage("Terjadi kesalahan sistem. Silakan coba lagi.");
       setIsLoading(false);

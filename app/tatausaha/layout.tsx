@@ -2,34 +2,34 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname,useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { handleLogout } from '@/lib/actions';
 import { useSession } from 'next-auth/react';
 
-export default function OperatorLayout({
-  children,
+export default function TatausahaLayout({
+    children,
 }: {
-  children: React.ReactNode;
+    children: React.ReactNode;
 }) {
-  const router = useRouter();
-  const { data: session, status } = useSession();
-  const [isOpen, setIsOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const pathname = usePathname();
+    const router = useRouter();
+    const { data: session, status } = useSession();
+    const [isOpen, setIsOpen] = useState(false);
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const pathname = usePathname();
 
-  // Helper function untuk menentukan class active pada sidebar
-  const getLinkStyle = (path: string) => {
-    const isActive = pathname === path;
-    return `block px-4 py-2 rounded-lg transition-all duration-200 ${
+    // Helper function untuk menentukan class active pada sidebar
+    const getLinkStyle = (path: string) => {
+        const isActive = pathname === path;
+        return `block px-4 py-2 rounded-lg transition-all duration-200 ${
       isActive 
         ? 'bg-blue-600 text-white shadow-md' 
         : 'text-slate-300 hover:bg-slate-800 hover:text-white'
     }`;
-  };
+    };
 
-  return (
-    <div className="flex min-h-screen bg-gray-100 text-slate-900 relative">
+    return (
+        <div className="flex min-h-screen bg-gray-100 text-slate-900 relative">
       
       {/* --- SIDEBAR --- */}
       <aside className={`
@@ -52,11 +52,11 @@ export default function OperatorLayout({
         </div>
 
         <nav className="mt-6 space-y-2 px-4">
-          <Link href="/operator" className={getLinkStyle('/operator')}>
+          <Link href="/tatausaha" className={getLinkStyle('/tatausaha')}>
             Dashboard
           </Link>
-          <Link href="/operator/datauser" className={getLinkStyle('/operator/datauser')}>
-            Data User
+          <Link href="/tatausaha/dataguru" className={getLinkStyle('/tatausaha/dataguru')}>
+            Data Guru
           </Link>
         </nav>
       </aside>
@@ -127,7 +127,7 @@ export default function OperatorLayout({
                     </p>
                   </div>
                   <Link 
-                    href="/operator/profil" 
+                    href="/tatausaha/profil" 
                     onClick={() => setIsProfileOpen(false)}
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                   >
@@ -155,5 +155,5 @@ export default function OperatorLayout({
         </main>
       </div>
     </div>
-  );
+    );
 }

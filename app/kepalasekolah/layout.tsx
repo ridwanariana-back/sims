@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { handleLogout } from '@/lib/actions';
 import { useSession } from 'next-auth/react';
 
-export default function OperatorLayout({
+export default function KepalaSekolahLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -52,11 +52,8 @@ export default function OperatorLayout({
         </div>
 
         <nav className="mt-6 space-y-2 px-4">
-          <Link href="/operator" className={getLinkStyle('/operator')}>
+          <Link href="/kepalasekolah" className={getLinkStyle('/kepalasekolah')}>
             Dashboard
-          </Link>
-          <Link href="/operator/datauser" className={getLinkStyle('/operator/datauser')}>
-            Data User
           </Link>
         </nav>
       </aside>
@@ -127,7 +124,7 @@ export default function OperatorLayout({
                     </p>
                   </div>
                   <Link 
-                    href="/operator/profil" 
+                    href="/kepalasekolah/profil" 
                     onClick={() => setIsProfileOpen(false)}
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                   >

@@ -4,23 +4,25 @@ import { useState } from "react";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { updateProfile } from "@/lib/actions";
+import { useRouter } from "next/navigation";
 
 export default function EditProfileModal({ session: initialSession }: { session: any }) {
-  const { update } = useSession();
+  const { data: session, update } = useSession();
+  const router = useRouter();
+  
+  const currentUser = session?.user || initialSession.user;
+  const isGuru = currentUser.role === 'guru';
+
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [name, setName] = useState(initialSession?.user?.name || "");
+  const [name, setName] = useState(currentUser.name || "");
   
-  // State untuk preview gambar
-  const initialImage = initialSession?.user?.image 
-    ? `/profil/${initialSession.user.image}` 
-    : "/profil/default.png";
+  const initialImage = currentUser.image ? `/profil/${currentUser.image}` : "/profil/default.png";
   const [preview, setPreview] = useState(initialImage);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validasi ukuran file maks 2MB
       if (file.size > 2 * 1024 * 1024) {
         alert("Ukuran gambar terlalu besar! Maksimal 2MB.");
         e.target.value = "";
@@ -35,20 +37,24 @@ export default function EditProfileModal({ session: initialSession }: { session:
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
+    
+    // Jika guru, pastikan name yang dikirim adalah name asli agar tidak berubah di DB
+    if (isGuru) {
+      formData.set('name', currentUser.name);
+    }
+
     const result = await updateProfile(formData);
 
     if (result.success) {
-      // Memperbarui sesi client secara instan
       await update({
-        ...initialSession,
-        user: { 
-          ...initialSession.user, 
-          name: formData.get('name'), 
-          image: result.image 
-        }
+        ...currentUser,
+        name: formData.get('name'), 
+        image: result.image 
       });
+
+      router.refresh();
       alert("Profil berhasil diperbarui!");
-      setIsOpen(false); // Menutup modal setelah sukses
+      setIsOpen(false);
     } else {
       alert(result.error || "Terjadi kesalahan.");
     }
@@ -57,19 +63,16 @@ export default function EditProfileModal({ session: initialSession }: { session:
 
   return (
     <>
-      {/* Tombol pemicu modal */}
       <button 
         onClick={() => setIsOpen(true)}
         className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-all shadow-sm"
       >
-        Edit Profil
+        {isGuru ? "Ganti Foto Profil" : "Edit Profil"}
       </button>
 
-      {/* Overlay Modal dengan efek Blur */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4 transition-all">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative animate-in fade-in zoom-in duration-200">
-            {/* Tombol Close */}
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative">
             <button 
               onClick={() => setIsOpen(false)}
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
@@ -79,10 +82,9 @@ export default function EditProfileModal({ session: initialSession }: { session:
               </svg>
             </button>
             
-            <h3 className="text-xl font-bold mb-6 text-gray-800">Edit Informasi Profil</h3>
+            <h3 className="text-xl font-bold mb-6 text-gray-800">{isGuru ? "Ganti Foto Profil" : "Edit Informasi Profil"}</h3>
             
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Preview & Input Gambar */}
               <div className="flex flex-col items-center gap-4">
                 <div className="relative w-24 h-24 rounded-full overflow-hidden border-4 border-blue-50 shadow-md">
                   <Image src={preview} alt="Preview" fill className="object-cover" />
@@ -96,20 +98,23 @@ export default function EditProfileModal({ session: initialSession }: { session:
                 />
               </div>
 
-              {/* Input Nama */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Nama Lengkap</label>
+                <label className={`block text-sm font-semibold mb-1 ${isGuru ? "text-gray-400" : "text-gray-700"}`}>
+                  Nama Lengkap {isGuru && "(Hanya Tata Usaha yang bisa mengubah)"}
+                </label>
                 <input
                   type="text"
                   name="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                  disabled={isGuru}
+                  className={`w-full px-4 py-2 border rounded-lg outline-none transition-all ${
+                    isGuru ? "bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200" : "border-gray-300 focus:ring-2 focus:ring-blue-500"
+                  }`}
                   required
                 />
               </div>
 
-              {/* Tombol Aksi */}
               <div className="flex gap-3 pt-2">
                 <button 
                   type="button"
