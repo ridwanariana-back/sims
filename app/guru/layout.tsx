@@ -55,8 +55,8 @@ export default function GuruLayout({
           <Link href="/guru" className={getLinkStyle('/guru')}>
             Dashboard
           </Link>
-          <Link href="/guru/datamurid" className={getLinkStyle('/guru/datamurid')}>
-            Data Murid
+          <Link href="/guru/inputnilai" className={getLinkStyle('/guru/inputnilai')}>
+            Input Nilai
           </Link>
         </nav>
       </aside>
