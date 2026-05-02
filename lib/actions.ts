@@ -159,33 +159,61 @@ export async function updateGuru(id: number, formData: FormData) {
     const gender = formData.get('gender') as string;
 
     try {
-        await sql `
-      UPDATE guru 
-      SET nip = ${nip}, nama = ${nama}, mapel = ${mapel}, gender = ${gender}
-      WHERE id = ${id}
-    `;
+        // 1. Ambil NIP lama sebelum diupdate untuk mencari user terkait
+        const oldData = await sql`SELECT nip FROM guru WHERE id = ${id}`;
+        const oldNip = oldData.rows[0]?.nip;
+
+        // 2. Update data fisik di tabel guru
+        await sql`
+          UPDATE guru 
+          SET nip = ${nip}, nama = ${nama}, mapel = ${mapel}, gender = ${gender}
+          WHERE id = ${id}
+        `;
+
+        // 3. Sinkronisasi Otomatis: Update username & password (opsional) di tabel users
+        // Kita cari user yang punya guru_id sama dengan id guru ini
+        await sql`
+          UPDATE users 
+          SET username = ${nip}, name = ${nama} 
+          WHERE guru_id = ${id}
+        `;
+
         revalidatePath('/tatausaha/dataguru');
+        revalidatePath('/operator/datauser'); // Agar list di operator juga update[cite: 8]
         return { success: true };
     } catch (error) {
-        return { error: "Gagal memperbarui data guru." };
+        console.error(error);
+        return { error: "Gagal memperbarui data guru dan sinkronisasi akun." };
     }
 }
 
 export async function deleteGuru(id: number) {
-    try {
-        await sql `DELETE FROM guru WHERE id = ${id}`;
-        revalidatePath('/tatausaha/dataguru');
-        return { success: true };
-    } catch (error) {
-        return { error: "Gagal menghapus data." };
+  try {
+    // 1. Ambil NIP guru dulu sebelum dihapus untuk menghapus user terkait
+    const res = await sql`SELECT nip FROM guru WHERE id = ${id}`;
+    const guru = res.rows[0];
+
+    if (guru) {
+      // 2. Hapus akun di tabel users (berdasarkan username yang sama dengan NIP)
+      await sql`DELETE FROM users WHERE username = ${guru.nip}`;
+      
+      // 3. Hapus data guru
+      await sql`DELETE FROM guru WHERE id = ${id}`;
     }
+
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { success: false, error: "Gagal menghapus data guru dan user terkait." };
+  }
 }
 
 // Ambil data guru yang BELUM memiliki akun di tabel users
+// Cari fungsi ini di lib/actions.ts dan ubah SQL-nya
 export async function getGuruTanpaAkun() {
   try {
     const data = await sql`
-      SELECT id, nip, nama 
+      SELECT id, nip, nama, jenis  -- <--- TAMBAHKAN 'jenis' DI SINI!
       FROM guru 
       WHERE id NOT IN (SELECT guru_id FROM users WHERE guru_id IS NOT NULL)
       ORDER BY nama ASC
@@ -230,17 +258,17 @@ export async function deleteUser(id: number) {
   }
 }
 
-// Update Nama & Username
+// Update hanya Nama saja[cite: 8]
 export async function updateUser(id: number, formData: FormData) {
   const name = formData.get('name') as string;
-  const username = formData.get('username') as string;
 
   try {
-    await sql`UPDATE users SET name = ${name}, username = ${username} WHERE id = ${id}`;
-    revalidatePath('/operator/manajemen-user');
+    // Hilangkan UPDATE username di sini[cite: 8]
+    await sql`UPDATE users SET name = ${name} WHERE id = ${id}`;
+    revalidatePath('/operator/datauser');
     return { success: true };
   } catch (error) {
-    return { error: "Gagal memperbarui user." };
+    return { error: "Gagal memperbarui nama user." };
   }
 }
 
@@ -378,5 +406,30 @@ export async function deleteMurid(id: number) {
     return { 
       error: "Gagal menghapus. Data mungkin terikat dengan tabel lain (seperti Nilai)." 
     };
+  }
+}
+
+export async function getOperatorStats() {
+  try {
+    // 1. Hitung total akun di tabel users
+    const userRes = await sql`SELECT COUNT(*) as count FROM users`;
+    
+    // 2. Hitung guru yang ada di data fisik (tabel guru) tapi belum dibuatkan akun
+    const pendingRes = await sql`
+      SELECT COUNT(*) as count FROM guru 
+      WHERE id NOT IN (SELECT guru_id FROM users WHERE guru_id IS NOT NULL)
+    `;
+    
+    // 3. Hitung total wali kelas
+    const waliRes = await sql`SELECT COUNT(*) as count FROM wali_kelas`;
+
+    return {
+      totalUsers: Number(userRes.rows[0].count),
+      pendingGuru: Number(pendingRes.rows[0].count),
+      totalWaliKelas: Number(waliRes.rows[0].count),
+    };
+  } catch (error) {
+    console.error("Gagal mengambil data statistik:", error);
+    return { totalUsers: 0, pendingGuru: 0, totalWaliKelas: 0 };
   }
 }

@@ -58,6 +58,9 @@ export default function OperatorLayout({
           <Link href="/operator/datauser" className={getLinkStyle('/operator/datauser')}>
             Data User
           </Link>
+          <Link href="/operator/datawalikelas" className={getLinkStyle('/operator/datawalikelas')}>
+            Data Wali Kelas
+          </Link>
         </nav>
       </aside>
 

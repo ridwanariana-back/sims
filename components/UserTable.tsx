@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Trash2, Edit, Key, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Trash2, Edit, Key, X, ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { deleteUser, updateUser, resetPassword } from "@/lib/actions";
 import Image from "next/image";
 
@@ -27,15 +27,19 @@ export default function UserTable({ initialData }: { initialData: any[] }) {
   const indexOfFirstItem = indexOfLastItem - rowsPerPage;
   const currentItems = filteredUsers.slice(indexOfFirstItem, indexOfLastItem);
 
-  // Handler Hapus
+  // Handler Hapus (Aturan: Selain Tata Usaha boleh dihapus)
   const handleDelete = async (id: number, name: string) => {
     if (confirm(`Apakah Anda yakin ingin menghapus akun ${name}?`)) {
       const res = await deleteUser(id);
-      if (!res.success) alert(res.error);
+      if (res.success) {
+        alert("Akun berhasil dihapus!");
+      } else {
+        alert(res.error);
+      }
     }
   };
 
-  // Handler Update Profil
+  // Handler Update Profil (Hanya kirim Nama)[cite: 8]
   const handleUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -126,17 +130,18 @@ export default function UserTable({ initialData }: { initialData: any[] }) {
                         <span className="text-sm font-semibold text-slate-700">{user.name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{user.username}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600 font-mono">{user.username}</td>
                     <td className="px-6 py-4 text-sm">
                       <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
-                        user.role === 'guru' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
+                        user.role === 'tatausaha' ? 'bg-purple-100 text-purple-700' : 
+                        user.role === 'operator' ? 'bg-blue-100 text-blue-700' : 
+                        user.role === 'kepalasekolah' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
                       }`}>
                         {user.role}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex justify-center gap-2">
-                        {/* Tombol Edit Profil */}
                         <button 
                           onClick={() => setEditingUser(user)}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" 
@@ -145,19 +150,15 @@ export default function UserTable({ initialData }: { initialData: any[] }) {
                           <Edit size={16} />
                         </button>
 
-                        {/* Tombol Reset Password (Khusus Guru) */}
-                        {user.role === "guru" && (
-                          <button 
-                            onClick={() => handleReset(user)}
-                            className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" 
-                            title="Reset Password ke NIP"
-                          >
-                            <Key size={16} />
-                          </button>
-                        )}
+                        <button 
+                          onClick={() => handleReset(user)}
+                          className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" 
+                          title="Reset Password ke NIP"
+                        >
+                          <Key size={16} />
+                        </button>
 
-                        {/* Tombol Hapus (Khusus Guru) */}
-                        {user.role === "guru" && (
+                        {user.role !== "tatausaha" && (
                           <button 
                             onClick={() => handleDelete(user.id, user.name)}
                             className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -205,57 +206,72 @@ export default function UserTable({ initialData }: { initialData: any[] }) {
         </div>
       </div>
 
-      {/* MODAL EDIT PROFIL */}
+      {/* MODAL EDIT PROFIL[cite: 7, 10] */}
       {editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl relative animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl relative animate-in fade-in zoom-in duration-200 border border-indigo-100">
             <button 
               onClick={() => setEditingUser(null)} 
-              className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"
+              className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 transition-colors"
             >
               <X size={20} />
             </button>
             
-            <h3 className="text-xl font-bold mb-1 text-slate-800">Edit Profil User</h3>
-            <p className="text-sm text-slate-500 mb-6">Ubah informasi dasar akun.</p>
+            <h3 className="text-xl font-black mb-1 text-slate-800 uppercase tracking-tight">Edit Profil User</h3>
+            <p className="text-xs text-slate-500 mb-6 font-medium">Perbarui informasi nama akun pengguna.</p>
             
-            <form onSubmit={handleUpdate} className="space-y-4">
+            <form onSubmit={handleUpdate} className="space-y-5">
+              {/* Input Nama (Bisa diubah)[cite: 10] */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
+                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5 ml-1 tracking-wider">
+                  Nama Lengkap
+                </label>
                 <input 
                   name="name" 
                   type="text"
                   defaultValue={editingUser.name}
                   required 
-                  className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
+                  placeholder="Masukkan nama lengkap..."
+                  className="w-full border-2 border-slate-100 p-3 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all text-sm font-bold text-slate-700 bg-slate-50/50" 
                 />
               </div>
 
+              {/* Input Username (Terkunci/NIP)[cite: 7, 8] */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                <input 
-                  name="username" 
-                  type="text"
-                  defaultValue={editingUser.username}
-                  required 
-                  className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
-                />
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1 tracking-wider">
+                  Username (NIP)
+                </label>
+                <div className="relative group">
+                  <input 
+                    name="username" 
+                    type="text"
+                    value={editingUser.username}
+                    readOnly // Mencegah perubahan manual[cite: 8]
+                    className="w-full border-2 border-slate-100 p-3 rounded-xl text-sm font-bold text-slate-400 bg-slate-100 cursor-not-allowed transition-all" 
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300">
+                    <Info size={16} />
+                  </div>
+                </div>
+                <p className="text-[9px] text-slate-400 mt-2 ml-1 leading-relaxed italic">
+                  * Username disinkronkan dengan NIP di data Guru fisik (Tata Usaha).
+                </p>
               </div>
 
-              <div className="flex gap-2 pt-4">
+              <div className="flex gap-3 pt-4">
                 <button 
                   type="button" 
                   onClick={() => setEditingUser(null)} 
-                  className="flex-1 bg-gray-100 py-2.5 rounded-lg hover:bg-gray-200 transition font-medium"
+                  className="flex-1 bg-slate-50 py-3 rounded-xl hover:bg-slate-100 transition font-bold text-slate-500 text-xs uppercase tracking-widest border-2 border-transparent"
                 >
                   Batal
                 </button>
                 <button 
                   type="submit" 
                   disabled={loading} 
-                  className="flex-1 bg-indigo-600 text-white py-2.5 rounded-lg font-bold hover:bg-indigo-700 transition disabled:opacity-50 shadow-md"
+                  className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-black hover:bg-indigo-700 transition disabled:opacity-50 shadow-lg shadow-indigo-200 text-xs uppercase tracking-widest"
                 >
-                  {loading ? "Menyimpan..." : "Simpan Perubahan"}
+                  {loading ? "Proses..." : "Simpan Perubahan"}
                 </button>
               </div>
             </form>

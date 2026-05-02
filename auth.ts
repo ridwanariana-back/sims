@@ -27,7 +27,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         const { username, password } = credentials;
 
-        // Ambil data user dari database
         const userQuery = await sql`
           SELECT id, name, username, role, password, image 
           FROM users 
@@ -58,39 +57,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const isLoggedIn = !!auth?.user;
       const role = auth?.user?.role;
       
+      // Definisi Halaman Proteksi
       const isOperatorPage = nextUrl.pathname.startsWith('/operator');
       const isTUPage = nextUrl.pathname.startsWith('/tatausaha');
       const isGuruPage = nextUrl.pathname.startsWith('/guru');
-      const isKepalaPage = nextUrl.pathname.startsWith('/kepalasekolah'); // Proteksi baru
+      const isKepalaPage = nextUrl.pathname.startsWith('/kepalasekolah');
+      const isKurikulumPage = nextUrl.pathname.startsWith('/wakilkurikulum'); // Baru
+      const isKesiswaanPage = nextUrl.pathname.startsWith('/wakilkesiswaan'); // Baru
       
-      // Role-based Access Control
-      if (isOperatorPage) {
-        if (isLoggedIn && role === 'operator') return true;
-        return false; 
-      }
-
-      if (isTUPage) {
-        if (isLoggedIn && role === 'tatausaha') return true;
-        return false; 
-      }
-
-      if (isGuruPage) {
-        if (isLoggedIn && role === 'guru') return true;
-        return false; 
-      }
-
-      if (isKepalaPage) {
-        if (isLoggedIn && role === 'kepalasekolah') return true;
-        return false; 
-      }
+      // Role-based Access Control (Proteksi Rute)
+      if (isOperatorPage && (!isLoggedIn || role !== 'operator')) return false;
+      if (isTUPage && (!isLoggedIn || role !== 'tatausaha')) return false;
+      if (isGuruPage && (!isLoggedIn || role !== 'guru')) return false;
+      if (isKepalaPage && (!isLoggedIn || role !== 'kepalasekolah')) return false;
+      if (isKurikulumPage && (!isLoggedIn || role !== 'wakilkurikulum')) return false; // Baru[cite: 6]
+      if (isKesiswaanPage && (!isLoggedIn || role !== 'wakilkesiswaan')) return false; // Baru[cite: 6]
       
-      // Redirect login berdasarkan role
+      // Logic Redirect saat Login (Jika user di root '/')
       if (isLoggedIn && nextUrl.pathname === '/') {
         let destination = '/';
         if (role === 'operator') destination = '/operator';
         else if (role === 'tatausaha') destination = '/tatausaha';
         else if (role === 'guru') destination = '/guru';
-        else if (role === 'kepalasekolah') destination = '/kepalasekolah'; // Redirect kepala sekolah
+        else if (role === 'kepalasekolah') destination = '/kepalasekolah';
+        else if (role === 'wakilkurikulum') destination = '/wakilkurikulum'; // Baru[cite: 6]
+        else if (role === 'wakilkesiswaan') destination = '/wakilkesiswaan'; // Baru[cite: 6]
         
         return Response.redirect(new URL(destination, nextUrl));
       }
@@ -131,6 +122,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 hari
+    maxAge: 30 * 24 * 60 * 60,
   },
 });
