@@ -8,9 +8,11 @@ import {
 import { useRouter } from "next/navigation";
 
 const DAFTAR_KELAS = ["X", "XI", "XII"];
-const DAFTAR_ROMBEL = [
-  "X.1", "X.2", "X.3", "X.4", "XI.F1", "XI.F2", "XI.F3", "XI.F4", "XII.F1", "XII.F2", "XII.F3", "XII.F4"
-];
+const ROMBEL_PER_KELAS: Record<string, string[]> = {
+  "X": ["X.1", "X.2", "X.3", "X.4"],
+  "XI": ["XI.F1", "XI.F2", "XI.F3", "XI.F4"],
+  "XII": ["XII.F1", "XII.F2", "XII.F3", "XII.F4"]
+};
 
 export default function MuridTable({ initialData }: { initialData: any[] }) {
   const router = useRouter();
@@ -20,6 +22,7 @@ export default function MuridTable({ initialData }: { initialData: any[] }) {
   
   const [editingMurid, setEditingMurid] = useState<any>(null); // State untuk Modal Edit
   const [loading, setLoading] = useState(false);
+  const [tempKelas, setTempKelas] = useState<string>("");
 
   const filteredMurid = initialData.filter((m) =>
     m.nama.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -41,6 +44,11 @@ export default function MuridTable({ initialData }: { initialData: any[] }) {
       }
       setLoading(false);
     }
+  };
+
+  const handleEditClick = (murid: any) => {
+    setEditingMurid(murid);
+    setTempKelas(murid.kelas); // Set kelas awal sesuai data murid
   };
 
   // --- FUNGSI SIMPAN EDIT ---
@@ -142,11 +150,11 @@ export default function MuridTable({ initialData }: { initialData: any[] }) {
                   <td className="px-6 py-6 text-center align-top">
                     <div className="flex justify-center gap-2">
                       <button 
-                        onClick={() => setEditingMurid(murid)}
-                        className="p-2.5 bg-white border-2 border-slate-100 text-amber-600 hover:border-amber-600 rounded-xl transition-all"
-                      >
-                        <Edit size={18} />
-                      </button>
+  onClick={() => handleEditClick(murid)}
+  className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-100 transition-all"
+>
+  <Edit size={16} />
+</button>
                       <button 
                         onClick={() => handleDelete(murid.id)}
                         className="p-2.5 bg-white border-2 border-slate-100 text-red-600 hover:border-red-600 rounded-xl transition-all"
@@ -210,18 +218,33 @@ export default function MuridTable({ initialData }: { initialData: any[] }) {
                 <label className="text-[10px] font-black text-slate-500 uppercase">Nama Ibu</label>
                 <input name="nama_ibu" defaultValue={editingMurid.nama_ibu} required className="w-full border-2 p-3.5 rounded-xl font-black uppercase bg-slate-50" />
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">Kelas</label>
-                <select name="kelas" defaultValue={editingMurid.kelas} className="w-full border-2 p-3.5 rounded-xl font-black">
-                  {DAFTAR_KELAS.map(k => <option key={k} value={k}>{k}</option>)}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">Rombel</label>
-                <select name="rombel" defaultValue={editingMurid.rombel} className="w-full border-2 p-3.5 rounded-xl font-black">
-                  {DAFTAR_ROMBEL.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
+              {/* Cari bagian select Kelas di dalam Modal Edit */}
+<div className="space-y-1">
+  <label className="text-[10px] font-black text-slate-500 uppercase">Kelas</label>
+  <select 
+    name="kelas" 
+    value={tempKelas} // Gunakan state tempKelas
+    onChange={(e) => setTempKelas(e.target.value)} // Update saat diganti
+    className="w-full border-2 p-3.5 rounded-xl font-black bg-white outline-none focus:border-amber-500"
+  >
+    {DAFTAR_KELAS.map(k => <option key={k} value={k}>{k}</option>)}
+  </select>
+</div>
+
+{/* Cari bagian select Rombel di dalam Modal Edit */}
+<div className="space-y-1">
+  <label className="text-[10px] font-black text-slate-500 uppercase">Rombel</label>
+  <select 
+    name="rombel" 
+    defaultValue={editingMurid.rombel} 
+    className="w-full border-2 p-3.5 rounded-xl font-black bg-white outline-none focus:border-amber-500"
+  >
+    {/* Tampilkan rombel hanya yang sesuai dengan kelas yang dipilih (tempKelas) */}
+    {ROMBEL_PER_KELAS[tempKelas]?.map(r => (
+      <option key={r} value={r}>{r}</option>
+    ))}
+  </select>
+</div>
               <div className="flex gap-4 pt-6 md:col-span-2">
                 <button type="button" onClick={() => setEditingMurid(null)} className="flex-1 bg-slate-100 py-4 rounded-2xl font-black text-slate-600 uppercase text-xs">Batal</button>
                 <button type="submit" disabled={loading} className="flex-[2] bg-amber-600 text-white py-4 rounded-2xl font-black hover:bg-amber-700 flex items-center justify-center gap-2 uppercase text-xs">

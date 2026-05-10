@@ -153,15 +153,20 @@ export default function GuruTable({ initialData }: { initialData: any[] }) {
 
                   {/* KOLOM WALI KELAS (Read Only) */}
                   <td className="px-6 py-6 align-top">
-                    {guru.wali_kelas ? (
+                    {/* Sekarang membaca field wali_kelas_rombel hasil JOIN */}
+                    {guru.wali_kelas_rombel ? (
                       <div className="flex flex-col items-start gap-1">
-                        <span className="text-[9px] font-black text-slate-900 uppercase bg-yellow-400 px-1 rounded">Tugas Tambahan</span>
+                        <span className="text-[9px] font-black text-slate-900 uppercase bg-yellow-400 px-1 rounded">
+                          Tugas Tambahan
+                        </span>
                         <span className="bg-slate-900 text-white px-3 py-1.5 rounded-xl text-xs font-black border-2 border-slate-800 shadow-sm">
-                          KELAS {guru.wali_kelas}
+                          KELAS {guru.wali_kelas_rombel}
                         </span>
                       </div>
                     ) : (
-                      <span className="text-slate-300 text-[10px] font-black italic uppercase tracking-widest">Non-Wali</span>
+                      <span className="text-slate-300 text-[10px] font-black italic uppercase tracking-widest">
+                        Non-Wali
+                      </span>
                     )}
                   </td>
 

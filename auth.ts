@@ -3,24 +3,6 @@ import Credentials from 'next-auth/providers/credentials';
 import { sql } from '@vercel/postgres';
 import bcrypt from 'bcryptjs';
 
-// 1. Deklarasi tipe agar TypeScript mengenali property kustom kita
-declare module 'next-auth' {
-  interface Session {
-    user: {
-      id: string;
-      role: string; 
-      username: string;
-      image?: string;
-    } & DefaultSession['user'];
-  }
-
-  interface User {
-    role?: string;
-    username?: string;
-    image?: string;
-  }
-}
-
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
@@ -40,7 +22,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (passwordsMatch) {
           return {
-            id: user.id,
+            id: user.id.toString(), // Pastikan menjadi string
             name: user.name,
             username: user.username,
             role: user.role,
@@ -57,31 +39,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const isLoggedIn = !!auth?.user;
       const role = auth?.user?.role;
       
-      // Definisi Halaman Proteksi
+      const isGuruPage = nextUrl.pathname.startsWith('/guru');
       const isOperatorPage = nextUrl.pathname.startsWith('/operator');
       const isTUPage = nextUrl.pathname.startsWith('/tatausaha');
-      const isGuruPage = nextUrl.pathname.startsWith('/guru');
       const isKepalaPage = nextUrl.pathname.startsWith('/kepalasekolah');
-      const isKurikulumPage = nextUrl.pathname.startsWith('/wakilkurikulum'); // Baru
-      const isKesiswaanPage = nextUrl.pathname.startsWith('/wakilkesiswaan'); // Baru
+      const isKurikulumPage = nextUrl.pathname.startsWith('/wakilkurikulum');
+      const isKesiswaanPage = nextUrl.pathname.startsWith('/wakilkesiswaan');
       
-      // Role-based Access Control (Proteksi Rute)
+      if (isGuruPage && (!isLoggedIn || role !== 'guru')) return false;
       if (isOperatorPage && (!isLoggedIn || role !== 'operator')) return false;
       if (isTUPage && (!isLoggedIn || role !== 'tatausaha')) return false;
-      if (isGuruPage && (!isLoggedIn || role !== 'guru')) return false;
       if (isKepalaPage && (!isLoggedIn || role !== 'kepalasekolah')) return false;
-      if (isKurikulumPage && (!isLoggedIn || role !== 'wakilkurikulum')) return false; // Baru[cite: 6]
-      if (isKesiswaanPage && (!isLoggedIn || role !== 'wakilkesiswaan')) return false; // Baru[cite: 6]
+      if (isKurikulumPage && (!isLoggedIn || role !== 'wakilkurikulum')) return false;
+      if (isKesiswaanPage && (!isLoggedIn || role !== 'wakilkesiswaan')) return false;
       
-      // Logic Redirect saat Login (Jika user di root '/')
       if (isLoggedIn && nextUrl.pathname === '/') {
         let destination = '/';
         if (role === 'operator') destination = '/operator';
         else if (role === 'tatausaha') destination = '/tatausaha';
         else if (role === 'guru') destination = '/guru';
         else if (role === 'kepalasekolah') destination = '/kepalasekolah';
-        else if (role === 'wakilkurikulum') destination = '/wakilkurikulum'; // Baru[cite: 6]
-        else if (role === 'wakilkesiswaan') destination = '/wakilkesiswaan'; // Baru[cite: 6]
+        else if (role === 'wakilkurikulum') destination = '/wakilkurikulum';
+        else if (role === 'wakilkesiswaan') destination = '/wakilkesiswaan';
         
         return Response.redirect(new URL(destination, nextUrl));
       }
@@ -91,11 +70,44 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
     async jwt({ token, user, trigger, session }) {
       if (user) {
-        token.id = user.id;
-        token.role = user.role;
-        token.username = user.username;
-        token.name = user.name;
-        token.picture = user.image;
+        token.id = user.id as string;
+        token.role = user.role as string;
+        token.username = user.username as string;
+        token.name = user.name as string;
+        token.picture = user.image as string;
+
+        // CEK DATA WALI KELAS & TAHUN AJARAN[cite: 2]
+        if (user.role === 'guru' && user.username) {
+          try {
+            const guruRes = await sql`SELECT id FROM guru WHERE nip = ${user.username as string}`;
+            const guruId = guruRes.rows[0]?.id;
+
+            if (guruId) {
+              // Mengambil rombel DAN tahun_ajaran agar riwayat tidak nyampur[cite: 2]
+              const waliRes = await sql`
+                SELECT rombel, tahun_ajaran 
+                FROM wali_kelas 
+                WHERE guru_id = ${guruId} 
+                LIMIT 1
+              `;
+              
+              if (waliRes.rows.length > 0) {
+                token.isWaliKelas = true;
+                token.kelasWali = waliRes.rows[0].rombel;
+                token.tahunAjaran = waliRes.rows[0].tahun_ajaran; // Simpan ke token[cite: 2]
+              } else {
+                token.isWaliKelas = false;
+                token.kelasWali = null;
+                token.tahunAjaran = null;
+              }
+            }
+          } catch (error) {
+            console.error("Gagal cek wali kelas:", error);
+            token.isWaliKelas = false;
+            token.kelasWali = null;
+            token.tahunAjaran = null;
+          }
+        }
       }
 
       if (trigger === "update" && session?.user) {
@@ -112,7 +124,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = token.role as string;
         session.user.username = token.username as string;
         session.user.name = token.name as string;
-        session.user.image = token.picture as string; 
+        session.user.image = token.picture as string;
+        
+        // Melempar data wali kelas dan tahun ajaran ke session user[cite: 2]
+        session.user.isWaliKelas = !!token.isWaliKelas;
+        session.user.kelasWali = (token.kelasWali as string) || null;
+        session.user.tahunAjaran = (token.tahunAjaran as string) || null; // Sekarang tersedia di client[cite: 2]
       }
       return session;
     }

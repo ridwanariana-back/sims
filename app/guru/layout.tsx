@@ -51,14 +51,33 @@ export default function GuruLayout({
           </div>
         </div>
 
-        <nav className="mt-6 space-y-2 px-4">
-          <Link href="/guru" className={getLinkStyle('/guru')}>
-            Dashboard
-          </Link>
-          <Link href="/guru/inputnilai" className={getLinkStyle('/guru/inputnilai')}>
-            Input Nilai
-          </Link>
-        </nav>
+<nav className="mt-6 space-y-2 px-4">
+  {/* Menu Umum Guru */}
+  <Link href="/guru" className={getLinkStyle('/guru')}>Dashboard</Link>
+  <Link href="/guru/inputnilai" className={getLinkStyle('/guru/inputnilai')}>Input Nilai</Link>
+  <Link href="/guru/riwayat-nilai" className={getLinkStyle('/guru/riwayat-nilai')}>Riwayat Nilai</Link>
+
+  {/* --- MENU KHUSUS WALI KELAS --- */}
+  {session?.user?.isWaliKelas && (
+    <>
+      <div className="pt-6 pb-2 px-4 text-[10px] font-black text-slate-500 uppercase border-t border-slate-800 mt-4">
+        Wali Kelas: {session.user.kelasWali}
+      </div>
+      <Link href="/guru/datamurid" className={getLinkStyle('/guru/datamurid')}>
+        Data Murid Kelas
+      </Link>
+      <Link href="/guru/riwayat" className={getLinkStyle('/guru/riwayat')}>
+        Riwayat Perwalian
+      </Link>
+      <Link href="/guru/kehadiran" className={getLinkStyle('/guru/kehadiran')}>
+        Daftar Kehadiran
+      </Link>
+      <Link href="/guru/kedisiplinan" className={getLinkStyle('/guru/kedisiplinan')}>
+        Catatan Kedisiplinan
+      </Link>
+    </>
+  )}
+</nav>
       </aside>
 
       {/* --- OVERLAY SIDEBAR (Mobile) --- */}

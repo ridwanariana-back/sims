@@ -5,14 +5,21 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 
 export default async function GuruPage() {
-    // Proteksi: Pastikan hanya Tata Usaha yang bisa akses
+    // Proteksi: Pastikan hanya Tata Usaha yang bisa akses[cite: 6]
     const session = await auth();
     if (session?.user?.role !== "tatausaha") {
         redirect("/");
     }
 
-    // Ambil data guru terbaru
-    const res = await sql`SELECT * FROM guru ORDER BY nama ASC`;
+    // QUERY DIPERBAIKI: Menggabungkan tabel guru dengan tabel wali_kelas
+    const res = await sql`
+        SELECT 
+            g.*, 
+            wk.rombel as wali_kelas_rombel 
+        FROM guru g
+        LEFT JOIN wali_kelas wk ON g.id = wk.guru_id
+        ORDER BY g.nama ASC
+    `;
     const gurus = res.rows;
 
     return (
@@ -25,6 +32,7 @@ export default async function GuruPage() {
                 <AddGuruModal />
             </div>
 
+            {/* Kirim data yang sudah digabung ke GuruTable[cite: 6] */}
             <GuruTable initialData={gurus} />
         </div>
     );

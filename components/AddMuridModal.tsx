@@ -4,17 +4,18 @@ import { useState } from "react";
 import { X, Save, UserPlus, GraduationCap, Calendar, Heart, Fingerprint } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-// Daftar Kelas & Rombel sesuai kebutuhan sekolah
 const DAFTAR_KELAS = ["X", "XI", "XII"];
-const DAFTAR_ROMBEL = [
-  "X.1", "X.2", "X.3", "X.4", 
-  "XI.F1", "XI.F2", "XI.F3", "XI.F4", 
-  "XII.F1", "XII.F2", "XII.F3", "XII.F4"
-];
+
+const ROMBEL_PER_KELAS: Record<string, string[]> = {
+  "X": ["X.1", "X.2", "X.3", "X.4"],
+  "XI": ["XI.F1", "XI.F2", "XI.F3", "XI.F4"],
+  "XII": ["XII.F1", "XII.F2", "XII.F3", "XII.F4"]
+};
 
 export default function AddMuridModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [selectedKelas, setSelectedKelas] = useState("X");
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -151,24 +152,32 @@ export default function AddMuridModal() {
               </div>
 
               {/* KELAS & ROMBEL */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">Tingkat Kelas</label>
-                <select 
-                  name="kelas" 
-                  className="w-full border-2 p-3.5 rounded-xl font-black bg-white text-slate-900 outline-none focus:border-blue-500"
-                >
-                  {DAFTAR_KELAS.map((k) => <option key={k} value={k}>{k}</option>)}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">Rombel</label>
-                <select 
-                  name="rombel" 
-                  className="w-full border-2 p-3.5 rounded-xl font-black bg-white text-slate-900 outline-none focus:border-blue-500"
-                >
-                  {DAFTAR_ROMBEL.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
+              {/* DROPDOWN KELAS */}
+<div className="space-y-1">
+  <label className="text-[10px] font-black text-slate-500 uppercase">Kelas</label>
+  <select 
+    name="kelas" 
+    value={selectedKelas}
+    onChange={(e) => setSelectedKelas(e.target.value)} // Pantau perubahan kelas
+    className="w-full border-2 p-3.5 rounded-xl font-black bg-white text-slate-900 outline-none focus:border-blue-500"
+  >
+    {DAFTAR_KELAS.map((k) => <option key={k} value={k}>{k}</option>)}
+  </select>
+</div>
+
+{/* DROPDOWN ROMBEL (Dinamis) */}
+<div className="space-y-1">
+  <label className="text-[10px] font-black text-slate-500 uppercase">Rombel</label>
+  <select 
+    name="rombel" 
+    className="w-full border-2 p-3.5 rounded-xl font-black bg-white text-slate-900 outline-none focus:border-blue-500"
+  >
+    {/* Tampilkan rombel hanya yang sesuai dengan selectedKelas */}
+    {ROMBEL_PER_KELAS[selectedKelas].map((r) => (
+      <option key={r} value={r}>{r}</option>
+    ))}
+  </select>
+</div>
 
               {/* BUTTONS */}
               <div className="flex gap-4 pt-6 md:col-span-2">

@@ -61,6 +61,12 @@ export default function TatausahaLayout({
           <Link href="/tatausaha/datamurid" className={getLinkStyle('/tatausaha/datamurid')}>
             Data Murid
           </Link>
+          <Link href="/tatausaha/presensi-guru" className={getLinkStyle('/tatausaha/presensi-guru')}>
+            Daftar Hadir Guru
+          </Link>
+          <Link href="/tatausaha/jadwal-pelajaran" className={getLinkStyle('/tatausaha/jadwal-pelajaran')}>
+            Jadwal Pelajaran
+          </Link>
         </nav>
       </aside>
 

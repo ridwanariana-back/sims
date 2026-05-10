@@ -55,6 +55,30 @@ export default function KepalaSekolahLayout({
           <Link href="/kepalasekolah" className={getLinkStyle('/kepalasekolah')}>
             Dashboard
           </Link>
+          <Link href="/kepalasekolah/dataguru" className={getLinkStyle('/kepalasekolah/dataguru')}>
+            Data Guru
+          </Link>
+          <Link href="/kepalasekolah/datamurid" className={getLinkStyle('/kepalasekolah/datamurid')}>
+            Data Murid
+          </Link>
+          <Link href="/kepalasekolah/kedisiplinan" className={getLinkStyle('/kepalasekolah/kedisiplinan')}>
+            Catatan Kedisiplinan
+          </Link>
+          <Link href="/kepalasekolah/rekap-nilai" className={getLinkStyle('/kepalasekolah/rekap-nilai')}>
+            Rekap Nilai Murid
+          </Link>
+          <Link href="/kepalasekolah/jadwal" className={getLinkStyle('/kepalasekolah/jadwal')}>
+            Jadwal Pelajaran
+          </Link>
+          <Link href="/kepalasekolah/kehadiran" className={getLinkStyle('/kepalasekolah/kehadiran')}>
+            Daftar Hadir
+          </Link>
+
+      <div className="pt-6 pb-2 px-4 text-[10px] font-black text-slate-500 uppercase border-t border-slate-800 mt-4">
+        Menu Guru : 
+      </div>
+      <Link href="/kepalasekolah/inputnilai" className={getLinkStyle('/kepalasekolah/inputnilai')}>Input Nilai</Link>
+      <Link href="/kepalasekolah/riwayat-nilai" className={getLinkStyle('/kepalasekolah/riwayat-nilai')}>Riwayat Nilai</Link>
         </nav>
       </aside>
 
