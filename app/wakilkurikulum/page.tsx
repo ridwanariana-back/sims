@@ -1,206 +1,445 @@
-// app/wakilkurikulum/page.tsx
+// app/wakakurikulum/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { getKepalaSekolahStats } from "@/lib/actions";
+import { getKepalaSekolahStats } from "@/lib/actions"; // Menggunakan action yang sama atau disesuaikan
 import { 
   Users, 
-  LayoutGrid, 
+  GraduationCap, 
+  CheckCircle2, 
   TrendingUp, 
-  Clock, 
-  UserCheck,
-  X,
+  BarChart3, 
   BookOpen 
 } from "lucide-react";
+import { 
+  ResponsiveContainer, 
+  AreaChart, 
+  Area, 
+  BarChart, 
+  Bar, 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip 
+} from "recharts";
 
-export default function WakilKurikulumPage() {
-  const router = useRouter();
+export default function WakaKurikulumPage() {
   const [stats, setStats] = useState<any>(null);
-  const [modal, setModal] = useState<{ open: boolean; title: string; data: string[] }>({
-    open: false, title: "", data: []
-  });
 
   useEffect(() => {
     getKepalaSekolahStats().then(setStats);
   }, []);
 
-  if (!stats) return <div className="p-20 text-center font-black animate-pulse text-slate-900">MEMUAT DASHBOARD...</div>;
+  // Data Visualisasi Akademik & Kurikulum
+  const dataPerkembanganSekolah = [
+    { tahun: "2023", siswa: 850 },
+    { tahun: "2024", siswa: 920 },
+    { tahun: "2025", siswa: 980 },
+    { tahun: "2026", siswa: 1024 },
+  ];
 
-  const openModal = (title: string, data: string[]) => setModal({ open: true, title, data });
+  const dataNilaiRombel = [
+    { rombel: "X-A", nilai: 78 },
+    { rombel: "X-B", nilai: 82 },
+    { rombel: "XI-A", nilai: 85 },
+    { rombel: "XI-B", nilai: 80 },
+    { rombel: "XII-A", nilai: 89 },
+    { rombel: "XII-B", nilai: 87 },
+  ];
+
+  const dataRataNilaiPerKelas = [
+    { kelas: "X.1", rataRata: 84 },
+    { kelas: "X.2", rataRata: 79 },
+    { kelas: "XI.1", rataRata: 88 },
+    { kelas: "XI.2", rataRata: 82 },
+    { kelas: "XII.1", rataRata: 91 },
+    { kelas: "XII.2", rataRata: 85 },
+  ];
+
+  const dataPerkembanganSemester = [
+    { semester: "2024 Ganjil", rataNilai: 78 },
+    { semester: "2024 Genap", rataNilai: 81 },
+    { semester: "2025 Ganjil", rataNilai: 83 },
+    { semester: "2025 Genap", rataNilai: 86 },
+  ];
+
+  const dataTabelRanking = [
+    { nama: "Andi Wijaya", kelas: "XII.1", nilai: 94 },
+    { nama: "Siti Rahma", kelas: "XI.1", nilai: 92 },
+    { nama: "Budi Santoso", kelas: "XII.1", nilai: 90 },
+    { nama: "Citra Lestari", kelas: "X.1", nilai: 89 },
+    { nama: "Dewi Anwar", kelas: "XI.2", text: 88 },
+  ];
+
+  const dataJamMengajarGuru = [
+    { nama: "Supardi, M.Pd", jam: 24 },
+    { nama: "Siti Aminah, S.Pd", jam: 28 },
+    { nama: "Hendra, S.Kom", jam: 18 },
+    { nama: "Rinaawati, S.Si", jam: 22 },
+    { nama: "Bambang, M.Si", jam: 26 },
+  ];
+
+  const dataTabelKinerjaGuru = [
+    { nama: "Supardi, M.Pd", mapel: "Matematika", kehadiran: 98, inputNilai: "Lengkap" },
+    { nama: "Siti Aminah, S.Pd", mapel: "Bahasa Inggris", kehadiran: 95, inputNilai: "Lengkap" },
+    { nama: "Hendra, S.Kom", mapel: "Informatika", kehadiran: 92, inputNilai: "Belum Lengkap" },
+    { nama: "Rinaawati, S.Si", mapel: "Biologi", kehadiran: 100, inputNilai: "Lengkap" },
+    { nama: "Bambang, M.Si", mapel: "Fisika", kehadiran: 89, inputNilai: "Belum Lengkap" },
+  ];
+
+  // Alert Khusus disaring hanya untuk ranah Kurikulum & Administrasi Mengajar
+  const dataAlertSistem = [
+    { 
+      id: 1, 
+      tipe: "WARNING", 
+      pesan: "Rata-rata nilai akhir ujian Matematika menurun sebesar 15% di tingkat kelas X", 
+      kategori: "Kurikulum",
+      waktu: "2 jam yang lalu" 
+    },
+    { 
+      id: 2, 
+      tipe: "WARNING", 
+      pesan: "3 guru mata pelajaran belum menyelesaikan input nilai raport semester ganjil", 
+      kategori: "Administrasi",
+      waktu: "Hari ini" 
+    },
+  ];
+
+  if (!stats) {
+    return (
+      <div className="p-20 text-center font-black tracking-widest text-slate-900 animate-pulse uppercase text-sm">
+        ▓▒░ MEMUAT PANEL KEDEPANAN KURIKULUM... ░▒▓
+      </div>
+    );
+  }
 
   return (
-    <div className="p-4 md:p-8 space-y-10 bg-slate-50 min-h-screen">
-      {/* HEADER */}
-      <div className="text-center md:text-left">
-        <h1 className="text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter">Dashboard Wakil Kurikulum</h1>
-        <p className="text-slate-500 font-bold uppercase text-[9px] md:text-[10px] mt-1 tracking-widest">
-          Sistem Informasi Manajemen Sekolah — SMAN 1 Pemulutan Selatan
-        </p>
+    <div className="p-6 lg:p-10 space-y-10 bg-slate-50 min-h-screen selection:bg-indigo-500 selection:text-white">
+      
+      {/* HEADER UTAMA WAKA KURIKULUM */}
+      <div className="bg-white p-8 rounded-[2rem] border-4 border-slate-900 shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase px-3 py-1 rounded-full border border-emerald-300 tracking-wider">
+            Bidang Akademik & Pengajaran
+          </span>
+          <h1 className="text-3xl lg:text-4xl font-black text-slate-900 uppercase tracking-tighter mt-2">
+            Dashboard Wakil Kurikulum
+          </h1>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
+            Panel Pemantauan Mutu Pembelajaran, Capaian Target KKM, dan Administrasi Guru
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tahun Ajaran Aktif</p>
+          <p className="text-sm font-black text-slate-900 bg-amber-300 border-2 border-slate-900 px-4 py-1.5 rounded-xl mt-1 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+            2025/2026
+          </p>
+        </div>
       </div>
 
-      {/* STATS CARDS - Responsive Grid */}
+      {/* SUMMARY CARDS KONTROL KURIKULUM */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div 
-          onClick={() => router.push("/wakilkurikulum/dataguru")}
-          className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm cursor-pointer hover:border-blue-400 transition-all active:scale-95 flex flex-col items-center justify-center text-center"
-        >
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl mb-4"><Users size={24} /></div>
-          <div className="text-3xl font-black text-slate-900">{stats.counts.total_guru}</div>
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Guru</div>
-        </div>
-
-        <div onClick={() => openModal("Daftar Tingkat Kelas", stats.details.kelas)} className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm cursor-pointer hover:border-purple-400 transition-all active:scale-95 flex flex-col items-center justify-center text-center">
-          <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl mb-4"><LayoutGrid size={24} /></div>
-          <div className="text-3xl font-black text-slate-900">{stats.counts.total_kelas}</div>
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Kelas</div>
-        </div>
-
-        <div onClick={() => openModal("Daftar Rombongan Belajar", stats.details.rombel)} className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm cursor-pointer hover:border-rose-400 transition-all active:scale-95 flex flex-col items-center justify-center text-center">
-          <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl mb-4"><TrendingUp size={24} /></div>
-          <div className="text-3xl font-black text-slate-900">{stats.counts.total_rombel}</div>
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Rombel</div>
-        </div>
-
-        <div onClick={() => openModal("Daftar Mata Pelajaran", stats.details.mapel)} className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm cursor-pointer hover:border-orange-400 transition-all active:scale-95 flex flex-col items-center justify-center text-center">
-          <div className="p-3 bg-orange-50 text-orange-600 rounded-2xl mb-4"><BookOpen size={24} /></div>
-          <div className="text-3xl font-black text-slate-900">{stats.counts.total_mapel}</div>
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Mapel</div>
-        </div>
-      </div>
-
-      {/* DAFTAR WALI KELAS */}
-      <div 
-          onClick={() => router.push("/wakilkurikulum/dataguru")}
-          className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm cursor-pointer hover:border-purple-400 transition-all active:scale-95 flex flex-col items-center justify-center text-center"
-        >
-      <div className="bg-white p-8 rounded-[3rem] border-2 border-slate-100 shadow-sm">
-        <h3 className="font-black uppercase text-sm mb-6 flex items-center gap-3 text-slate-900">
-          <UserCheck className="text-indigo-500" size={20} /> Daftar Wali Kelas
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.waliKelas?.map((wk: any, i: number) => (
-            <div key={i} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-center gap-4 hover:bg-white hover:border-indigo-200 transition-colors">
-              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-xs shrink-0">{wk.rombel}</div>
-              <div className="flex flex-col min-w-0">
-                <span className="text-[11px] font-black text-slate-900 uppercase leading-none truncate">{wk.nama_guru}</span>
-                <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase">NIP: {wk.nip}</span>
-              </div>
+        {[
+          { title: "Total Siswa", value: "1,024", subtitle: "Target Evaluasi", icon: <Users size={22} />, color: "bg-blue-400" },
+          { title: "Total Guru", value: "68", subtitle: "Pendidik Aktif", icon: <GraduationCap size={22} />, color: "bg-purple-400" },
+          { title: "Ketuntasan KKM", value: "87%", subtitle: "Rerata Sekolah", icon: <CheckCircle2 size={22} />, color: "bg-rose-400" },
+          { title: "Beban Jam Kerja", value: "100%", subtitle: "Sesuai Dapodik", icon: <BookOpen size={22} />, color: "bg-cyan-400" },
+        ].map((card, idx) => (
+          <div 
+            key={idx} 
+            className="bg-white p-6 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex items-center justify-between group hover:-translate-y-1 transition-all duration-200"
+          >
+            <div className="space-y-1">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{card.title}</p>
+              <h3 className="text-3xl font-black text-slate-900 tracking-tight">{card.value}</h3>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{card.subtitle}</p>
             </div>
-          ))}
-        </div>
-      </div>
-      </div>
-
-      {/* MONITORING SECTION */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* JAM MENGAJAR */}
-        <div 
-          onClick={() => router.push("/wakilkurikulum/jadwal")}
-          className="bg-white p-8 rounded-[3rem] border-2 border-slate-100 shadow-sm cursor-pointer hover:border-rose-400 transition-all"
-        >
-          <div className="flex justify-between items-center mb-8">
-            <div className="w-14 h-14 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center"><Clock size={28} /></div>
-            <div className="text-right">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Jadwal Pelajaran</p>
-              <h3 className="text-2xl font-black text-slate-900 italic uppercase">Jam Mengajar</h3>
+            <div className={`p-3.5 rounded-xl text-slate-950 border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] ${card.color}`}>
+              {card.icon}
             </div>
           </div>
-          <div className="space-y-4">
-            {stats.jamMengajar.map((item: any, i: number) => (
-              <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-transparent">
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[11px] font-black text-slate-900 uppercase tracking-tighter truncate">{item.mapel}</span>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest truncate">{item.daftar_guru || "Belum Ada Guru"}</span>
+        ))}
+      </div>
+
+      {/* PANEL GRAFIK INDUK AKADEMIK */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        {/* 1. Grafik Perkembangan Jumlah Siswa (Kebutuhan Perhitungan Rombel) */}
+        <div className="bg-white p-6 rounded-[2rem] border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="p-2 bg-blue-100 border border-blue-400 rounded-lg text-blue-600"><TrendingUp size={16} /></div>
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Tren Pertumbuhan Pengisi Rombel</h3>
+            </div>
+            <div className="w-full h-[220px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={dataPerkembanganSekolah} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="tahun" tick={{ fill: "#64748b", fontSize: 10, fontWeight: "bold" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "#64748b", fontSize: 10, fontWeight: "bold" }} axisLine={false} tickLine={false} />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="siswa" stroke="#2563eb" strokeWidth={3} fill="rgba(59, 130, 246, 0.1)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <p className="text-[9px] font-bold text-slate-400 uppercase mt-4 border-t pt-3 italic">Acuan alokasi distribusi rombongan belajar baru tahun ajaran mendatang.</p>
+        </div>
+
+        {/* 2. Grafik Nilai Rerata Tingkat Rombel */}
+        <div className="bg-white p-6 rounded-[2rem] border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="p-2 bg-purple-100 border border-purple-400 rounded-lg text-purple-600"><BarChart3 size={16} /></div>
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Rata-Rata Nilai Kognitif Rombel</h3>
+            </div>
+            <div className="w-full h-[220px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dataNilaiRombel} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="rombel" tick={{ fill: "#64748b", fontSize: 10, fontWeight: "bold" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "#64748b", fontSize: 10, fontWeight: "bold" }} axisLine={false} tickLine={false} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Bar dataKey="nilai" fill="#7c3aed" radius={[6, 6, 0, 0]} barSize={24} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <p className="text-[9px] font-bold text-slate-400 uppercase mt-4 border-t pt-3 italic">Perbandingan pencapaian serapan materi kurikulum lintas rombel.</p>
+        </div>
+
+      </div>
+
+      {/* SECTION ANALISIS AKADEMIK MENDALAM */}
+      <div className="space-y-6 pt-6 border-t-4 border-dashed border-slate-200">
+        <div>
+          <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+            <span>📊</span>Analisis Capaian & Hasil Belajar Siswa
+          </h2>
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+            Pemantauan berkala rata-rata nilai per kelas, grafik evaluasi lintasan semester, dan peringkat pararel
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* Rata-Rata Nilai Per Kelas */}
+          <div className="bg-white p-6 rounded-[2rem] border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)]">
+            <div className="mb-4">
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Rata-Rata Nilai Per Kelas</h3>
+            </div>
+            <div className="w-full h-[230px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dataRataNilaiPerKelas} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="kelas" tick={{ fill: "#64748b", fontSize: 10, fontWeight: "bold" }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 10, fontWeight: "bold" }} axisLine={false} tickLine={false} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Bar dataKey="rataRata" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={26} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Tren Nilai Lintas Semester */}
+          <div className="bg-white p-6 rounded-[2rem] border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)]">
+            <div className="mb-4">
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">📈 Tren Nilai Lintas Semester</h3>
+            </div>
+            <div className="w-full h-[230px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={dataPerkembanganSemester} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="semester" tick={{ fill: "#64748b", fontSize: 10, fontWeight: "bold" }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[50, 100]} tick={{ fill: "#64748b", fontSize: 10, fontWeight: "bold" }} axisLine={false} tickLine={false} />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="rataNilai" stroke="#ec4899" strokeWidth={4} dot={{ r: 5, strokeWidth: 2 }} activeDot={{ r: 7 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Tabel Ranking Pararel Teratas */}
+          <div className="bg-white p-6 rounded-[2rem] border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] flex flex-col justify-between">
+            <div>
+              <div className="mb-4">
+                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">🏆 Tabel Ranking Pararel Teratas</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b-2 border-slate-900 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                      <th className="pb-2">Nama</th>
+                      <th className="pb-2 text-center">Kelas</th>
+                      <th className="pb-2 text-right">Nilai</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs font-bold">
+                    {dataTabelRanking.map((siswa, i) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        <td className="py-2.5 text-slate-900 uppercase tracking-tight flex items-center gap-1.5">
+                          <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black ${i === 0 ? 'bg-amber-300 border border-slate-900' : 'bg-slate-100'}`}>
+                            {i + 1}
+                          </span>
+                          {siswa.nama}
+                        </td>
+                        <td className="py-2.5 text-center text-slate-500">{siswa.kelas}</td>
+                        <td className="py-2.5 text-right font-black text-indigo-600">{siswa.nilai}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <p className="text-[9px] font-bold text-slate-400 uppercase mt-2 pt-2 border-t border-dashed italic">
+              Menampilkan acuan data 5 besar capaian nilai raport tertinggi pararel sekolah.
+            </p>
+          </div>
+
+        </div>
+      </div>
+
+      {/* SECTION EVALUASI BEBAN & KINERJA MENGAJAR GURU */}
+      <div className="space-y-6 pt-6 border-t-4 border-dashed border-slate-200">
+        <div>
+          <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+            <span>👩‍🏫</span>Beban Jam Kurikulum & Administrasi Guru
+          </h2>
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+            Validasi kecukupan alokasi jam mengajar serta ketepatan pelaporan nilai perangkat mengajar guru
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* Grafik Batang Alokasi Jam Mengajar */}
+          <div className="bg-white p-6 rounded-[2rem] border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] lg:col-span-1">
+            <div className="mb-4">
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">📊 Total Jam Mengajar / Minggu</h3>
+            </div>
+            <div className="w-full h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dataJamMengajarGuru} layout="vertical" margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                  <XAxis type="number" tick={{ fill: "#64748b", fontSize: 10, fontWeight: "bold" }} axisLine={false} tickLine={false} />
+                  <YAxis dataKey="nama" type="category" tick={{ fill: "#0f172a", fontSize: 9, fontWeight: "black" }} axisLine={false} tickLine={false} width={90} />
+                  <Tooltip />
+                  <Bar dataKey="jam" fill="#7c3aed" radius={[0, 6, 6, 0]} barSize={16} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Tabel Status Administrasi Raport & Kehadiran Mengajar */}
+          <div className="bg-white p-6 rounded-[2rem] border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] lg:col-span-2 flex flex-col justify-between">
+            <div>
+              <div className="mb-4">
+                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">📋 Rekapitulasi Kehadiran Kelas & Status Input Nilai</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b-2 border-slate-900 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                      <th className="pb-3">Nama Guru / Mapel</th>
+                      <th className="pb-3 text-center">Presensi KBM</th>
+                      <th className="pb-3 text-right">Kelengkapan Nilai</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs font-bold">
+                    {dataTabelKinerjaGuru.map((guru, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50">
+                        <td className="py-3">
+                          <p className="text-slate-900 uppercase tracking-tight font-black">{guru.nama}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">{guru.mapel}</p>
+                        </td>
+                        <td className="py-3 text-center">
+                          <span className={`px-2.5 py-1 rounded-lg font-black font-mono ${guru.kehadiran < 90 ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50'}`}>
+                            {guru.kehadiran}%
+                          </span>
+                        </td>
+                        <td className="py-3 text-right">
+                          <span className={`inline-block px-3 py-1 rounded-xl text-[9px] font-black uppercase border-2 tracking-wider ${
+                            guru.inputNilai === "Lengkap" 
+                              ? "bg-emerald-50 border-emerald-200 text-emerald-700 shadow-[2px_2px_0px_0px_rgba(16,185,129,0.1)]" 
+                              : "bg-rose-50 border-rose-200 text-rose-700 shadow-[2px_2px_0px_0px_rgba(244,63,94,0.1)]"
+                          }`}>
+                            {guru.inputNilai}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <p className="text-[9px] font-bold text-slate-400 uppercase mt-4 pt-2 border-t border-dashed italic">
+              *Beban mengajar formil dipantau agar memenuhi batas minimal sertifikasi pengajaran Dapodik (24 Jam/Minggu).
+            </p>
+          </div>
+
+        </div>
+      </div>
+
+      {/* SECTION ANOMALI & NOTIFIKASI KHUSUS KURIKULUM */}
+      <div className="space-y-6 pt-6 border-t-4 border-dashed border-slate-200">
+        <div>
+          <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+            <span>🚨</span>Instruksi Kilat & Peringatan Akademik
+          </h2>
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+            Sistem deteksi dini otomatis (*Early Warning*) untuk anomali capaian KKM dan keterlambatan administrasi pengajaran
+          </p>
+        </div>
+
+        <div className="bg-white p-6 lg:p-8 rounded-[2rem] border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] space-y-4">
+          <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500 border border-slate-900"></span>
+              </span>
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">
+                Anomali Kurikulum Aktif ({dataAlertSistem.length} Temuan Kasus)
+              </h3>
+            </div>
+            <span className="text-[9px] font-black uppercase text-slate-400 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded">
+              Academic Engine
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {dataAlertSistem.map((alert) => (
+              <div 
+                key={alert.id} 
+                className="p-5 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col justify-between transition-transform hover:-translate-y-0.5 bg-amber-50/50 border-amber-950 shadow-[4px_4px_0px_0px_#f59e0b]"
+              >
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase border-2 border-slate-900 bg-amber-400 text-slate-950">
+                      ⚠ {alert.tipe}
+                    </span>
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">
+                      {alert.kategori}
+                    </span>
+                  </div>
+                  
+                  <p className="text-xs font-black text-slate-900 leading-relaxed uppercase tracking-tight">
+                    {alert.pesan}
+                  </p>
                 </div>
-                <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 text-[10px] font-black text-slate-900 shrink-0 ml-4">{item.total_jam} JP</div>
+
+                <div className="mt-4 pt-2 border-t border-slate-900/10 flex justify-between items-center text-[9px] font-bold text-slate-400 uppercase">
+                  <span>Status: Evaluasi Rapat Kurikulum</span>
+                  <span className="font-mono">{alert.waktu}</span>
+                </div>
               </div>
             ))}
           </div>
-          <div className="mt-6 pt-6 border-t border-slate-50 flex justify-center">
-            <p className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em]">Lihat Semua Jadwal &rarr;</p>
-          </div>
-        </div>
-
-        {/* KEHADIRAN & NILAI */}
-        <div className="flex flex-col gap-8">
-          <div className="bg-white p-8 rounded-[3rem] border-2 border-slate-100 shadow-sm space-y-6">
-            <div className="flex justify-between items-center">
-              <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center"><UserCheck size={28} /></div>
-              <div className="text-right">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kehadiran Hari Ini</p>
-                <h3 className="text-2xl font-black text-slate-900 italic uppercase">Monitoring</h3>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-[10px] font-black uppercase italic">
-                <span className="text-slate-500">Guru Terabsen</span>
-                <span className="text-indigo-600">{stats.counts.guruHadir}/{stats.counts.total_guru}</span>
-              </div>
-              <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${(stats.counts.guruHadir / stats.counts.total_guru) * 100}%` }} />
-              </div>
-            </div>
-            <button onClick={() => router.push('/kepalasekolah/kehadiran')} className="w-full py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-lg">Lihat Detail Laporan</button>
-          </div>
-
-          <div onClick={() => router.push("/wakilkurikulum/rekap-nilai")} className="bg-white p-8 rounded-[3rem] border-2 border-slate-100 shadow-sm cursor-pointer hover:border-emerald-400 transition-all flex-1">
-            <h3 className="font-black uppercase text-sm mb-8 flex items-center gap-3 text-slate-900"><TrendingUp className="text-emerald-500" size={20} /> Siswa Nilai Tertinggi</h3>
-            <div className="space-y-6">
-              {stats.topNilai.map((n: any, i: number) => (
-                <div key={i} className="space-y-2">
-                  <div className="flex justify-between items-start">
-                    <div className="flex gap-3 min-w-0">
-                      <div className="w-6 h-6 rounded-lg bg-slate-900 text-white flex items-center justify-center text-[10px] font-black shrink-0">{i + 1}</div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-[11px] font-black text-slate-900 uppercase leading-none truncate">{n.nama}</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase mt-1 truncate">NISN: {n.nisn} • {n.rombel}</span>
-                      </div>
-                    </div>
-                    <div className="text-[11px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md shrink-0">{n.rerata}</div>
-                  </div>
-                  <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                    <div className="bg-emerald-500 h-full rounded-full shadow-[0_0_12px_rgba(16,185,129,0.3)]" style={{ width: `${n.rerata}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* MODAL */}
-      {modal.open && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-2xl rounded-[3rem] border-4 border-slate-900 shadow-2xl overflow-hidden">
-            <div className="bg-slate-900 p-6 flex justify-between items-center text-white">
-              <h2 className="font-black uppercase tracking-widest text-sm">{modal.title}</h2>
-              <button onClick={() => setModal({ ...modal, open: false })} className="opacity-50 hover:opacity-100"><X size={28} /></button>
-            </div>
-            <div className="p-8 max-h-[60vh] overflow-y-auto">
-              <table className="w-full max-w-md mx-auto text-center"> 
-                <thead>
-                  <tr className="border-b-2 border-slate-100">
-                    <th className="py-4 text-[10px] font-black uppercase text-slate-400 w-20">No</th>
-                    <th className="py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Nama</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {modal.data.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50">
-                      <td className="py-4 font-black text-slate-400 text-xs">{idx + 1}</td>
-                      <td className="py-4 font-black text-slate-900 uppercase text-xs">{item}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="p-6 bg-slate-50 text-center border-t border-slate-100">
-              <button onClick={() => setModal({ ...modal, open: false })} className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest">Tutup</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

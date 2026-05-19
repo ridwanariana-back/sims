@@ -9,7 +9,7 @@ export default function MonitoringJadwalPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const limit = 3;
+  const limit = 5;
 
   useEffect(() => {
     setLoading(true);

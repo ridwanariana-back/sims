@@ -85,32 +85,35 @@ export default function KehadiranPage() {
   };
 
   const handleSave = async () => {
-    // Validasi data dan tahun ajaran[cite: 2]
-    if (Object.keys(attendanceData).length === 0) return alert("Pilih minimal satu status kehadiran!");
-    if (!session?.user?.tahunAjaran) return alert("Sesi tahun ajaran tidak ditemukan. Silakan login ulang!");
+  // Validasi data dan tahun ajaran
+  if (Object.keys(attendanceData).length === 0) return alert("Pilih minimal satu status kehadiran!");
+  if (!session?.user?.tahunAjaran) return alert("Sesi tahun ajaran tidak ditemukan. Silakan login ulang!");
 
-    setLoading(true);
-    const finalData: any[] = [];
-    
-    Object.keys(attendanceData).forEach(date => {
-      Object.keys(attendanceData[date]).forEach(mId => {
-        finalData.push({
-          murid_id: Number(mId),
-          guru_id: Number(session?.user?.id),
-          tanggal: date,
-          status: attendanceData[date][Number(mId)],
-          tahun_ajaran: session?.user?.tahunAjaran // Implementasi Tahun Ajaran[cite: 2]
-        });
+  setLoading(true);
+  const finalData: any[] = [];
+  
+  Object.keys(attendanceData).forEach(date => {
+    Object.keys(attendanceData[date]).forEach(mId => {
+      finalData.push({
+        murid_id: Number(mId),
+        // 1. UBAH DI SINI: Kirimkan NIP berupa String (Username), HAPUS fungsi Number()
+        guru_id: session?.user?.username?.toString(), 
+        tanggal: date,
+        status: attendanceData[date][Number(mId)],
+        tahun_ajaran: session?.user?.tahunAjaran 
       });
     });
+  });
 
-    const res = await saveKehadiranBulk(finalData);
-    if (res.success) {
-      alert("Presensi Berhasil Disimpan!");
-      window.location.reload(); 
-    }
-    setLoading(false);
-  };
+  const res = await saveKehadiranBulk(finalData);
+  if (res.success) {
+    alert("Presensi Berhasil Disimpan!");
+    window.location.reload(); 
+  } else {
+    alert("Gagal menyimpan presensi: " + res.error);
+  }
+  setLoading(false);
+};
 
   return (
     <div className="space-y-6 p-2">

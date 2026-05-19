@@ -29,7 +29,7 @@ const statsGuru = await sql`
     (SELECT COUNT(DISTINCT rombel) FROM murid) as total_semua_kelas,
     (
       SELECT count(*) FROM nilai 
-      WHERE guru_id = (SELECT id FROM guru WHERE nip = ${nipGuru} LIMIT 1)
+      WHERE guru_id::text = ${nipGuru}::text -- <-- LANGSUNG KUNCI MENGGUNAKAN NIP GURU
     ) as total_input_nilai,
     (SELECT mapel FROM guru WHERE nip = ${nipGuru} LIMIT 1) as mapel
 `;
@@ -74,14 +74,14 @@ const statsGuru = await sql`
 
   const dataGuru = statsGuru.rows[0];
 
-  // Ambil rata-rata nilai per rombel untuk grafik
+// Ambil rata-rata nilai per rombel untuk grafik
 const grafikRes = await sql`
   SELECT 
     m.rombel, 
     AVG(n.nilai_angka)::numeric(10,2) as rata 
   FROM nilai n
   JOIN murid m ON n.murid_id = m.id
-  WHERE n.guru_id = (SELECT id FROM guru WHERE nip = ${nipGuru} LIMIT 1)
+  WHERE n.guru_id::text = ${nipGuru}::text -- <-- LANGSUNG KUNCI MENGGUNAKAN NIP GURU
   GROUP BY m.rombel
   ORDER BY m.rombel ASC
 `;

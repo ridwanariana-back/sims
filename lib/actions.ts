@@ -654,16 +654,23 @@ export async function getMissingDates(muridIds: number[], startDate: string, end
 
 export async function saveKehadiranBulk(data: any[]) {
   try {
+    if (!data || data.length === 0) return { success: false, error: "Data kosong" };
+
     for (const item of data) {
+      // Langsung masukkan string guru_id (NIP) ke database karena tipenya sudah VARCHAR
       await sql`
         INSERT INTO kehadiran (murid_id, guru_id, tanggal, status, tahun_ajaran)
         VALUES (${item.murid_id}, ${item.guru_id}, ${item.tanggal}, ${item.status}, ${item.tahun_ajaran})
+        ON CONFLICT (murid_id, tanggal) 
+        DO UPDATE SET status = EXCLUDED.status;
       `;
     }
+
+    revalidatePath("/guru/kehadiran");
     return { success: true };
   } catch (error) {
-    console.error(error);
-    return { success: false };
+    console.error("Gagal menyimpan kehadiran:", error);
+    return { success: false, error: "Gagal menyimpan ke database" };
   }
 }
 
@@ -692,24 +699,20 @@ export async function getHistoryKehadiran(
   }
 }
 
-// Ambil daftar catatan khusus untuk kelas yang diwalikan
-export async function getCatatanKedisiplinan(kelasWali: string, tahunAjaran: string) {
+// Di dalam lib/actions.ts (Contoh penyesuaian query select kedisiplinan)
+export async function getCatatanKedisiplinan(nipGuru: string) {
   try {
     const res = await sql`
-      SELECT 
-        c.*, 
-        m.nama, m.nisn, m.kelas, m.rombel, m.gender
-      FROM catatan_kedisiplinan c
-      JOIN murid m ON c.murid_id = m.id
-      WHERE m.kelas = ${kelasWali.split('.')[0]} 
-      AND m.rombel = ${kelasWali}
-      AND c.tahun_ajaran = ${tahunAjaran}
-      ORDER BY c.tanggal DESC
+      SELECT ck.*, m.nama as nama_murid, m.kelas, m.rombel 
+      FROM catatan_kedisiplinan ck
+      JOIN murid m ON ck.murid_id = m.id
+      WHERE ck.guru_id::text = ${nipGuru}::text
+      ORDER BY ck.created_at DESC
     `;
-    return res.rows;
+    return { success: true, data: res.rows };
   } catch (error) {
     console.error(error);
-    return [];
+    return { success: false, error: "Gagal mengambil data" };
   }
 }
 
@@ -840,49 +843,80 @@ export async function getHistoryKehadiranGuru(startDate: string, endDate: string
 
 // lib/actions.ts
 
-export async function saveJadwalPelajaran(data: any) {
+export async function saveJadwalPelajaran(data: any[]) {
   try {
-    // 1. Cek apakah ada jadwal yang bentrok
-    // Syarat bentrok: Hari sama, Kelas sama, Rombel sama, dan Jam Beririsan
-    const bentrok = await sql`
-      SELECT id FROM jadwal_pelajaran 
-      WHERE hari = ${data.hari} 
-      AND kelas = ${data.kelas} 
-      AND rombel = ${data.rombel}
-      AND (
-        (${data.jam_mulai} >= jam_mulai AND ${data.jam_mulai} < jam_selesai) OR
-        (${data.jam_selesai} > jam_mulai AND ${data.jam_selesai} <= jam_selesai)
-      )
-    `;
+    for (const item of data) {
+      // 1. CEK BENTROK: Cari apakah ada jadwal dengan GURU, HARI, dan JAM yang sama
+      // Kita abaikan pengecekan jika guru_id kosong (untuk kegiatan umum)
+      if (item.guru_id) {
+        const bentrok = await sql`
+          SELECT id FROM jadwal_pelajaran 
+          WHERE guru_id = ${item.guru_id} 
+          AND hari = ${item.hari} 
+          AND jam_mulai = ${item.jam_mulai}
+          LIMIT 1
+        `;
 
-    if (bentrok.rows.length > 0) {
-      return { success: false, message: "Jadwal bentrok! Sudah ada pelajaran lain di jam tersebut." };
+        if (bentrok.rows.length > 0) {
+          // Jika ditemukan data, lempar error dan batalkan semua proses
+          throw new Error(`Jadwal Bentrok! Guru tersebut sudah memiliki jadwal di hari ${item.hari} jam ${item.jam_mulai}.`);
+        }
+      }
+
+      // 2. Jika tidak bentrok, baru jalankan INSERT
+      await sql`
+        INSERT INTO jadwal_pelajaran (
+          hari, mapel, kelas, rombel, jam_mulai, jam_selesai, tahun_ajaran, guru_id
+        ) VALUES (
+          ${item.hari}, 
+          ${item.mapel}, 
+          ${item.kelas}, 
+          ${item.rombel}, 
+          ${item.jam_mulai}, 
+          ${item.jam_selesai}, 
+          ${item.tahun_ajaran}, 
+          ${item.guru_id || null}
+        )
+      `;
     }
-
-    // 2. Jika aman, baru simpan
-    await sql`
-      INSERT INTO jadwal_pelajaran (hari, mapel, kelas, rombel, jam_mulai, jam_selesai, tahun_ajaran)
-      VALUES (${data.hari}, ${data.mapel}, ${data.kelas}, ${data.rombel}, ${data.jam_mulai}, ${data.jam_selesai}, ${data.tahun_ajaran})
-    `;
-
+    
+    revalidatePath('/tatausaha/jadwal-pelajaran');
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
-    return { success: false, message: "Gagal menyimpan ke database." };
+    // Kirim pesan error yang spesifik ke UI
+    return { error: error.message || "Gagal simpan jadwal" };
   }
 }
 
 // lib/actions.ts
-export async function getJadwalPelajaran(tahunAjaran: string) {
+
+export async function getJadwalPelajaran(tahunAjaran?: string) {
   try {
+    // Jika tahunAjaran tidak dikirim saat fungsi dipanggil, kita cari otomatis
+    let ta = tahunAjaran;
+    if (!ta) {
+      const sekarang = new Date();
+      const tahunIni = sekarang.getFullYear();
+      const bulanIni = sekarang.getMonth(); // 0 = Januari, 6 = Juli
+      ta = bulanIni >= 6 ? `${tahunIni}/${tahunIni + 1}` : `${tahunIni - 1}/${tahunIni}`;
+    }
+
+    // QUERY YANG DISESUAIKAN: Menggabungkan data jadwal dengan data guru
     const res = await sql`
-      SELECT * FROM jadwal_pelajaran 
-      WHERE tahun_ajaran = ${tahunAjaran}
-      ORDER BY jam_mulai ASC
+      SELECT 
+        jp.*, 
+        g.nama as nama_guru, 
+        g.nip as nip_guru 
+      FROM jadwal_pelajaran jp
+      LEFT JOIN guru g ON jp.guru_id = g.id
+      WHERE jp.tahun_ajaran = ${ta}
+      ORDER BY jp.jam_mulai ASC
     `;
+    
     return res.rows;
   } catch (error) {
-    console.error(error);
+    console.error("Gagal mengambil data jadwal pelajaran:", error);
     return [];
   }
 }
@@ -1029,7 +1063,7 @@ export async function getRekapNilaiMurid(semester?: string, tahun_ajaran?: strin
 
 export async function getJadwalBebanMengajar(searchTerm: string = '', page: number = 1, limit: number = 5) {
   const offset = (page - 1) * limit;
-  const MENIT_PER_JP = 45; // Ubah ini sesuai durasi 1 jam pelajaran di sekolahmu
+  const MENIT_PER_JP = 40; // Ubah ini sesuai durasi 1 jam pelajaran di sekolahmu
 
   try {
     const data = await sql`
@@ -1127,5 +1161,62 @@ export async function deleteNilai(id: number) {
     return { success: true };
   } catch (error) {
     return { success: false };
+  }
+}
+
+export async function getDaftarGuru() {
+  try {
+    const res = await sql`SELECT id, nama, nip, mapel FROM guru ORDER BY nama ASC`;
+    return res.rows;
+  } catch (error) {
+    console.error("Gagal ambil daftar guru:", error);
+    return [];
+  }
+}
+
+// lib/actions.ts
+
+export async function checkRombelConflict(
+  muridId: number,
+  mapelGuru: string,
+  tahunAjaran: string,
+  currentGuruNip: string
+) {
+  try {
+    // 1. Ambil detail rombel murid yang sedang dipilih terlebih dahulu
+    const muridRes = await sql`SELECT rombel FROM murid WHERE id = ${muridId}`;
+    const rombelMurid = muridRes.rows[0]?.rombel;
+
+    if (!rombelMurid) {
+      return { allowed: true };
+    }
+
+    // 2. Gunakan CASTING TYPE ::text agar kolom integer bisa di-join aman ke varchar username
+    const conflictRes = await sql`
+      SELECT n.guru_id, u.name as nama_guru
+      FROM nilai n
+      JOIN murid m ON n.murid_id = m.id
+      JOIN users u ON n.guru_id::text = u.username::text 
+      WHERE m.rombel = ${rombelMurid}
+        AND n.mapel = ${mapelGuru}
+        AND n.tahun_ajaran = ${tahunAjaran}
+        AND n.guru_id::text != ${currentGuruNip}::text
+      LIMIT 1
+    `;
+
+    if (conflictRes.rows.length > 0) {
+      const namaGuruLain = conflictRes.rows[0].nama_guru;
+      const nipGuruLain = conflictRes.rows[0].guru_id;
+      return {
+        allowed: false,
+        error: `Data murid di rombel ${rombelMurid} sudah ada yang mengisi (${namaGuruLain} - ${nipGuruLain}), silahkan pilih murid di rombel yang lain.`,
+      };
+    }
+
+    return { allowed: true };
+  } catch (error) {
+    console.error("Error pada checkRombelConflict:", error);
+    // Jika ada error, kembalikan allowed: false agar tidak lolos bypass saat error database terjadi
+    return { allowed: false, error: "Gagal memverifikasi proteksi rombel database." };
   }
 }

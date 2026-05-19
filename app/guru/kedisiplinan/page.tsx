@@ -1,3 +1,5 @@
+// app/guru/kedisiplinan/page.tsx
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -43,46 +45,90 @@ export default function KedisiplinanPage() {
     keterangan: ""
   });
 
+  // PERBAIKAN 1: Sesuaikan parameter query dengan NIP Guru (session.user.username)
+  // PERBAIKAN: Berikan type casting pada data response agar TypeScript tidak membaca 'never'
   const refreshData = useCallback(async () => {
-    if (session?.user?.kelasWali && session?.user?.tahunAjaran) {
+    if (session?.user?.username && session?.user?.kelasWali) {
       setLoading(true);
-      const [resCatatan, resMurid] = await Promise.all([
-        getCatatanKedisiplinan(session.user.kelasWali, session.user.tahunAjaran),
-        getMuridByKelas(session.user.kelasWali)
-      ]);
-      setData(resCatatan);
-      setListMurid(resMurid);
-      setLoading(false);
+      try {
+        // Tambahkan 'as any' di ujung pemanggilan fungsi untuk menjinakkan TypeScript compiler
+        const [resCatatan, resMurid] = await Promise.all([
+          getCatatanKedisiplinan(session.user.username) as any,
+          getMuridByKelas(session.user.kelasWali) as any
+        ]);
+
+        // Cari data array catatan kasus
+        if (Array.isArray(resCatatan)) {
+          setData(resCatatan);
+        } else if (resCatatan && typeof resCatatan === 'object' && 'data' in resCatatan) {
+          setData(resCatatan.data || []);
+        } else {
+          setData([]);
+        }
+
+        // Cari data array list murid kelas
+        if (Array.isArray(resMurid)) {
+          setListMurid(resMurid);
+        } else if (resMurid && typeof resMurid === 'object' && 'data' in resMurid) {
+          setListMurid(resMurid.data || []);
+        } else {
+          setListMurid([]);
+        }
+
+      } catch (err) {
+        console.error("Gagal memuat data kedisiplinan:", err);
+      } finally {
+        setLoading(false);
+      }
     }
   }, [session]);
 
-  useEffect(() => { refreshData(); }, [refreshData]);
+  useEffect(() => { 
+    refreshData(); 
+  }, [refreshData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.murid_id || !formData.kategori || !formData.keterangan) {
+      return alert("Semua bidang wajib diisi!");
+    }
+    if (!session?.user?.tahunAjaran) {
+      return alert("Sesi tahun ajaran tidak ditemukan. Silakan login ulang!");
+    }
+
     setSubmitting(true);
-
-    let res;
-    if (editId) {
-      res = await updateCatatanKedisiplinan(editId, { 
-        kategori: formData.kategori, 
-        keterangan: formData.keterangan 
-      });
-    } else {
-      res = await saveCatatanKedisiplinan({
+    try {
+      const payload = {
         ...formData,
-        guru_id: session?.user?.id,
-        tahun_ajaran: session?.user?.tahunAjaran
-      });
-    }
+        // Gunakan NIP berupa String (Username), HAPUS fungsi Number() agar 012 aman!
+        guru_id: session?.user?.username?.toString(), 
+        tahun_ajaran: session?.user?.tahunAjaran,
+      };
 
-    if(res.success) {
-      setIsModalOpen(false);
-      setEditId(null);
-      setFormData({ murid_id: "", kategori: "Kedisiplinan", keterangan: "" });
-      await refreshData();
+      let res: any;
+      if (editId) {
+        res = await updateCatatanKedisiplinan(editId, payload);
+      } else {
+        res = await saveCatatanKedisiplinan(payload);
+      }
+
+      if (res.success) {
+        alert(editId ? "Catatan berhasil diperbarui!" : "Catatan berhasil disimpan!");
+        setIsModalOpen(false);
+        // PERBAIKAN 2: Reset murid_id menggunakan string kosong "", bukan angka 0
+        setFormData({ murid_id: "", kategori: "Kedisiplinan", keterangan: "" });
+        setEditId(null);
+        // PERBAIKAN 3: Panggil refreshData() dengan benar, bukan fetchData()
+        await refreshData(); 
+      } else {
+        alert("Gagal menyimpan data: " + res.error);
+      }
+    } catch (error: any) {
+      console.error("Error submitting form:", error);
+      alert("Terjadi kesalahan sistem: " + (error.message || "Gagal terhubung ke server"));
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   const handleEdit = (item: any) => {
@@ -97,15 +143,28 @@ export default function KedisiplinanPage() {
 
   const handleDelete = async (id: number) => {
     if (confirm("Hapus catatan ini?")) {
-      const res = await deleteCatatanKedisiplinan(id);
-      if (res.success) await refreshData();
+      // PERBAIKAN: Tambahkan casting 'as any' di ujung fungsi agar TypeScript mengizinkan pembacaan .error
+      const res: any = await deleteCatatanKedisiplinan(id);
+      
+      if (res.success) {
+        alert("Catatan berhasil dihapus!");
+        await refreshData();
+      } else {
+        // Sekarang res.error dijamin aman dan tidak merah lagi
+        alert("Gagal menghapus catatan: " + (res.error || "Terjadi kesalahan sistem"));
+      }
     }
   };
-
-  const filteredData = data.filter(item => 
-    item.nama.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.keterangan.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  
+  // Pengaman pencarian jika data murid/keterangan bernilai null
+  const filteredData = data.filter(item => {
+    const namaSiswa = item.nama_murid || item.nama || "";
+    const ketKasus = item.keterangan || "";
+    return (
+      namaSiswa.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ketKasus.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  });
 
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
   const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -136,9 +195,8 @@ export default function KedisiplinanPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          {/* REVISI: Shadow Dihilangkan */}
           <button 
-            onClick={() => { setEditId(null); setIsModalOpen(true); }}
+            onClick={() => { setEditId(null); setFormData({ murid_id: "", kategori: "Kedisiplinan", keterangan: "" }); setIsModalOpen(true); }}
             className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-xl font-black uppercase text-[10px] flex items-center gap-2 transition-all active:scale-95"
           >
             <Plus size={16} /> Catat Kasus
@@ -151,7 +209,7 @@ export default function KedisiplinanPage() {
         <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
             <select 
                 value={itemsPerPage} 
-                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                 className="bg-white border-2 border-slate-200 rounded-lg px-3 py-1 text-[10px] font-black uppercase outline-none focus:border-slate-900"
             >
                 <option value={10}>Show 10</option>
@@ -161,69 +219,70 @@ export default function KedisiplinanPage() {
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total {filteredData.length} Catatan</span>
         </div>
 
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-900">
-              <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest border-r border-white/10">Siswa</th>
-              <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest border-r border-white/10 text-center">Tanggal</th>
-              <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest border-r border-white/10">Kategori</th>
-              <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest border-r border-white/10">Keterangan</th>
-              <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest text-center">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {loading ? (
-               <tr><td colSpan={5} className="py-20 text-center animate-pulse font-bold text-slate-400 uppercase text-xs">Loading...</td></tr>
-            ) : paginatedData.length > 0 ? paginatedData.map((item) => (
-              <tr key={item.id} className="hover:bg-rose-50/30 transition-colors group">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 group-hover:bg-rose-100 group-hover:text-rose-600 transition-colors border border-transparent group-hover:border-rose-200">
-                        <UserX size={14} />
-                    </div>
-                    <div>
-                        <p className="text-xs font-black text-slate-900 uppercase leading-none">{item.nama}</p>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 italic">{item.nisn}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 text-center">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-full text-slate-600">
-                        <Calendar size={10} />
-                        <span className="text-[10px] font-black uppercase">{new Date(item.tanggal).toLocaleDateString('id-ID')}</span>
-                    </div>
-                </td>
-                <td className="px-6 py-4">
-                    <span className="text-[10px] font-black uppercase text-rose-600 bg-rose-50 px-3 py-1 rounded-lg border border-rose-100 font-mono">
-                        {item.kategori}
-                    </span>
-                </td>
-                <td className="px-6 py-4">
-                  <p className="text-xs font-medium text-slate-600 line-clamp-2 max-w-xs italic">"{item.keterangan}"</p>
-                </td>
-                {/* KOLOM AKSI */}
-                <td className="px-6 py-4">
-                  <div className="flex items-center justify-center gap-2">
-                    <button 
-                      onClick={() => handleEdit(item)}
-                      className="p-2 bg-amber-50 text-amber-600 rounded-lg border border-amber-100 hover:bg-amber-600 hover:text-white transition-all"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(item.id)}
-                      className="p-2 bg-rose-50 text-rose-600 rounded-lg border border-rose-100 hover:bg-rose-600 hover:text-white transition-all"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-900">
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest border-r border-white/10">Siswa</th>
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest border-r border-white/10 text-center">Tanggal</th>
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest border-r border-white/10">Kategori</th>
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest border-r border-white/10">Keterangan</th>
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest text-center">Aksi</th>
               </tr>
-            )) : (
-                <tr><td colSpan={5} className="py-20 text-center font-bold text-slate-400 uppercase text-xs italic">Kosong.</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                 <tr><td colSpan={5} className="py-20 text-center animate-pulse font-bold text-slate-400 uppercase text-xs">Loading...</td></tr>
+              ) : paginatedData.length > 0 ? paginatedData.map((item) => (
+                <tr key={item.id} className="hover:bg-rose-50/30 transition-colors group">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 group-hover:bg-rose-100 group-hover:text-rose-600 transition-colors border border-transparent group-hover:border-rose-200">
+                          <UserX size={14} />
+                      </div>
+                      <div>
+                          <p className="text-xs font-black text-slate-900 uppercase leading-none">{item.nama_murid || item.nama}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 italic">{item.nisn}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-full text-slate-600">
+                          <Calendar size={10} />
+                          <span className="text-[10px] font-black uppercase">{item.tanggal ? new Date(item.tanggal).toLocaleDateString('id-ID') : "-"}</span>
+                      </div>
+                  </td>
+                  <td className="px-6 py-4">
+                      <span className="text-[10px] font-black uppercase text-rose-600 bg-rose-50 px-3 py-1 rounded-lg border border-rose-100 font-mono">
+                          {item.kategori}
+                      </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <p className="text-xs font-medium text-slate-600 line-clamp-2 max-w-xs italic">"{item.keterangan}"</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center justify-center gap-2">
+                      <button 
+                        onClick={() => handleEdit(item)}
+                        className="p-2 bg-amber-50 text-amber-600 rounded-lg border border-amber-100 hover:bg-amber-600 hover:text-white transition-all"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(item.id)}
+                        className="p-2 bg-rose-50 text-rose-600 rounded-lg border border-rose-100 hover:bg-rose-600 hover:text-white transition-all"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )) : (
+                 <tr><td colSpan={5} className="py-20 text-center font-bold text-slate-400 uppercase text-xs italic">Belum ada catatan pelanggaran siswa.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
         {/* PAGINATION */}
         <div className="px-8 py-6 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
@@ -235,7 +294,7 @@ export default function KedisiplinanPage() {
         </div>
       </div>
 
-      {/* MODAL (REVISI: Shadow Belakang Hilang) */}
+      {/* MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] border-4 border-slate-900 overflow-hidden animate-in fade-in zoom-in duration-200 my-auto">
@@ -247,18 +306,20 @@ export default function KedisiplinanPage() {
             <form onSubmit={handleSubmit} className="p-8 space-y-5">
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Pilih Murid</label>
-                <select 
-                  required
-                  disabled={!!editId}
-                  className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-xs font-bold focus:border-rose-500 outline-none disabled:opacity-50 appearance-none"
-                  value={formData.murid_id}
-                  onChange={(e) => setFormData({...formData, murid_id: e.target.value})}
-                >
-                  <option value="">-- Pilih Nama Murid --</option>
-                  {listMurid.map((m: any) => (
-                    <option key={m.id} value={m.id}>{m.nama.toUpperCase()}</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select 
+                    required
+                    disabled={!!editId}
+                    className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-xs font-bold focus:border-rose-500 outline-none disabled:opacity-50 appearance-none"
+                    value={formData.murid_id}
+                    onChange={(e) => setFormData({...formData, murid_id: e.target.value})}
+                  >
+                    <option value="">-- Pilih Nama Murid --</option>
+                    {listMurid.map((m: any) => (
+                      <option key={m.id} value={m.id}>{m.nama.toUpperCase()}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="space-y-2">

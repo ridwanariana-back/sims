@@ -58,6 +58,9 @@ export default function KepalaSekolahLayout({
           <Link href="/wakilkurikulum/dataguru" className={getLinkStyle('/wakilkurikulum/dataguru')}>
             Data Guru
           </Link>
+          <Link href="/wakilkurikulum/datamurid" className={getLinkStyle('/wakilkurikulum/datamurid')}>
+            Data Murid
+          </Link>
           <Link href="/wakilkurikulum/rekap-nilai" className={getLinkStyle('/wakilkurikulum/rekap-nilai')}>
             Rekap Nilai Murid
           </Link>
@@ -65,9 +68,9 @@ export default function KepalaSekolahLayout({
             Jadwal Pelajaran
           </Link>
           <Link href="/wakilkurikulum/kehadiran" className={getLinkStyle('/wakilkurikulum/kehadiran')}>
-            Daftar Hadir Guru
+            Kehadiran
           </Link>
-
+          
       <div className="pt-6 pb-2 px-4 text-[10px] font-black text-slate-500 uppercase border-t border-slate-800 mt-4">
         Menu Guru : 
       </div>

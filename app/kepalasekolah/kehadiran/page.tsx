@@ -1,202 +1,234 @@
+// app/kepalasekolah/kehadiran/page.tsx
 "use client";
-import { useState, useEffect } from "react";
-import { getMonitoringKehadiran } from "@/lib/actions";
-import { 
-  Search, 
-  Calendar, 
-  UserCheck, 
-  Users, 
-  Clock, 
-  Filter,
-  ArrowRightLeft
-} from "lucide-react";
-import ExcelDaftarHadir from "@/components/ExcelDaftarHadir";
 
-export default function KehadiranPage() {
-  const [activeTab, setActiveTab] = useState("guru");
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState({ guru: [], murid: [] });
-  const [search, setSearch] = useState("");
-  
-  // Default Range: Hari ini
-  const today = new Date().toISOString().split('T')[0];
-  const [startDate, setStartDate] = useState(today);
-  const [endDate, setEndDate] = useState(today);
+import { useState } from "react";
+import Link from "next/link";
+import ExcelJS from "exceljs";
+import { ArrowLeft, Download, CalendarCheck, Users, GraduationCap } from "lucide-react";
 
-  useEffect(() => {
-    setLoading(true);
-    getMonitoringKehadiran(startDate, endDate, search).then((res) => {
-      setData(res);
-      setLoading(false);
-    });
-  }, [startDate, endDate, search]);
+export default function DaftarHadirPage() {
+  // State untuk mengontrol tab aktif ('guru' atau 'murid')
+  const [activeTab, setActiveTab] = useState<"guru" | "murid">("guru");
 
-  // Hitung Ringkasan Sederhana
-  const currentList = activeTab === "guru" ? data.guru : data.murid;
-  const totalHadir = currentList.filter((item: any) => item.status === 'Hadir').length;
-  const totalTidakHadir = currentList.length - totalHadir;
+  // Mock Data Kehadiran Guru (Siap dikoneksikan ke Neon Postgres DB)
+  const [dataHadirGuru] = useState([
+    { nama: "Siti Aminah, S.Pd", pns: "PNS", hadir: 20, izin: 1, sakit: 1, alfa: 0, persen: "91%" },
+    { nama: "Hendra, S.Kom", pns: "PNS", hadir: 22, izin: 0, sakit: 0, alfa: 0, persen: "100%" },
+    { nama: "Supardi, M.Pd", pns: "HONORER", hadir: 18, izin: 2, sakit: 2, alfa: 0, persen: "82%" },
+    { nama: "Bambang, M.Si", pns: "PNS", hadir: 21, izin: 1, sakit: 0, alfa: 0, persen: "95%" },
+    { nama: "Rinaawati, S.E", pns: "HONORER", hadir: 19, izin: 0, sakit: 1, alfa: 2, persen: "86%" },
+  ]);
+
+  // Mock Data Kehadiran Murid per Tingkat Kelas
+  const [dataHadirMurid] = useState([
+    { kelas: "Kelas X (Fase E)", totalSiswa: 69, hadir: 94, izin: 3, sakit: 2, alfa: 1 },
+    { kelas: "Kelas XI (Fase F)", totalSiswa: 67, hadir: 92, izin: 4, sakit: 3, alfa: 1 },
+    { kelas: "Kelas XII (Persiapan)", totalSiswa: 64, hadir: 97, izin: 1, sakit: 2, alfa: 0 },
+  ]);
+
+  const exportKehadiranToExcelWithChart = async () => {
+    const workbook = new ExcelJS.Workbook();
+
+    // ==========================================
+    // SHEET 1: KEHADIRAN GURU
+    // ==========================================
+    const sheetGuru = workbook.addWorksheet("Kehadiran Guru");
+    sheetGuru.columns = [
+      { header: "Nama Guru", key: "nama", width: 30 },
+      { header: "Status", key: "pns", width: 15 },
+      { header: "Hadir (Hari)", key: "hadir", width: 15 },
+      { header: "Izin", key: "izin", width: 10 },
+      { header: "Sakit", key: "sakit", width: 10 },
+      { header: "Alfa", key: "alfa", width: 10 },
+      { header: "Persentase", key: "persen", width: 15 },
+    ];
+    sheetGuru.getRow(1).font = { bold: true, color: { argb: "FFFFFF" } };
+    sheetGuru.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "0F172A" } };
+    dataHadirGuru.forEach(g => sheetGuru.addRow(g));
+
+    // Grafik Sheet Guru (Bar Chart Persentase)
+    const chartGuruConfig = {
+      type: "bar",
+      data: {
+        labels: dataHadirGuru.map(g => g.nama.split(",")[0]),
+        datasets: [{
+          label: "Hari Hadir",
+          data: dataHadirGuru.map(g => g.hadir),
+          backgroundColor: "#3b82f6"
+        }]
+      },
+      options: { title: { display: true, text: "TOTAL HARI HADIR GURU" } }
+    };
+    const urlGuru = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartGuruConfig))}&w=450&h=250`;
+
+    // ==========================================
+    // SHEET 2: KEHADIRAN MURID
+    // ==========================================
+    const sheetMurid = workbook.addWorksheet("Kehadiran Murid");
+    sheetMurid.columns = [
+      { header: "Tingkat Kelas", key: "kelas", width: 25 },
+      { header: "Total Siswa", key: "totalSiswa", width: 15 },
+      { header: "Rata-rata Hadir (%)", key: "hadir", width: 20 },
+      { header: "Izin (%)", key: "izin", width: 12 },
+      { header: "Sakit (%)", key: "sakit", width: 12 },
+      { header: "Alfa (%)", key: "alfa", width: 12 },
+    ];
+    sheetMurid.getRow(1).font = { bold: true, color: { argb: "FFFFFF" } };
+    sheetMurid.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E3A8A" } };
+    dataHadirMurid.forEach(m => sheetMurid.addRow(m));
+
+    // Grafik Sheet Murid (Pie Chart Perbandingan Alfa)
+    const chartMuridConfig = {
+      type: "pie",
+      data: {
+        labels: dataHadirMurid.map(m => m.kelas),
+        datasets: [{
+          data: dataHadirMurid.map(m => m.alfa),
+          backgroundColor: ["#ef4444", "#f59e0b", "#3b82f6"]
+        }]
+      },
+      options: { title: { display: true, text: "PROPORSI KETIDAKHADIRAN (ALFA) MURID" } }
+    };
+    const urlMurid = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartMuridConfig))}&w=450&h=250`;
+
+    // Ambil kedua grafik & inject ke sheet masing-masing
+    try {
+      const [resGuru, resMurid] = await Promise.all([fetch(urlGuru), fetch(urlMurid)]);
+      const [blobG, blobM] = await Promise.all([resGuru.blob(), resMurid.blob()]);
+      const [bufG, bufM] = await Promise.all([blobG.arrayBuffer(), blobM.arrayBuffer()]);
+
+      const imgG = workbook.addImage({ buffer: bufG, extension: "png" });
+      sheetGuru.addImage(imgG, { tl: { col: 8, row: 1 }, ext: { width: 450, height: 250 } });
+
+      const imgM = workbook.addImage({ buffer: bufM, extension: "png" });
+      sheetMurid.addImage(imgM, { tl: { col: 7, row: 1 }, ext: { width: 450, height: 250 } });
+    } catch (e) {
+      console.error("Gagal menyisipkan grafik", e);
+    }
+
+    // Trigger Download file tunggal berisi 2 sheet
+    const buffer = await workbook.xlsx.writeBuffer();
+    const fileBlob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const fileUrl = URL.createObjectURL(fileBlob);
+    const link = document.createElement("a");
+    link.href = fileUrl;
+    link.download = `Laporan_Presensi_SIMS_${new Date().getFullYear()}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(fileUrl);
+  };
 
   return (
-    <div className="p-8 space-y-8 bg-slate-50 min-h-screen">
-      {/* HEADER & FILTER SECTION */}
-      <div className="flex flex-wrap justify-between items-center gap-6">
+    <div className="space-y-6">
+      {/* HEADER BANNER */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white p-6 rounded-3xl border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] gap-4">
         <div>
-          <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">
-            Monitoring Kehadiran
-          </h1>
-          <p className="text-slate-500 font-bold uppercase text-[10px] mt-1 tracking-widest flex items-center gap-2">
-            <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
-            Laporan Real-time Unit Pendidikan
+          <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+            <span>📅</span> Monitoring Kehadiran & Presensi
+          </h2>
+          <p className="text-xs font-bold text-slate-400 uppercase">
+            Satu pintu rekapitulasi tingkat kehadiran pendidik dan peserta didik SMAN 1 Pemulutan Selatan
           </p>
         </div>
-        <ExcelDaftarHadir/>
+        
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+          <Link 
+            href="/kepalasekolah"
+            className="flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-900 font-black text-xs uppercase tracking-widest px-5 py-3.5 rounded-2xl border-2 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:translate-y-1 active:shadow-none transition-all w-full sm:w-auto"
+          >
+            <ArrowLeft size={16} /> Kembali
+          </Link>
 
-        <div className="flex flex-wrap gap-3 items-center bg-white p-3 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
-          <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-2xl border border-slate-100">
-            <Calendar size={14} className="text-slate-400" />
-            <input 
-              type="date" 
-              value={startDate} 
-              onChange={(e) => setStartDate(e.target.value)} 
-              className="bg-transparent text-[10px] font-black uppercase outline-none cursor-pointer"
-            />
-            <ArrowRightLeft size={12} className="text-slate-300" />
-            <input 
-              type="date" 
-              value={endDate} 
-              onChange={(e) => setEndDate(e.target.value)} 
-              className="bg-transparent text-[10px] font-black uppercase outline-none cursor-pointer"
-            />
-          </div>
-          
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-            <input 
-              type="text" 
-              placeholder="Cari nama atau NIP/NISN..." 
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 pr-4 py-3 bg-slate-50 rounded-2xl text-[11px] font-bold focus:outline-none border-2 border-transparent focus:border-indigo-500 transition-all w-64"
-            />
-          </div>
+          <button 
+            onClick={exportKehadiranToExcelWithChart}
+            className="flex items-center justify-center gap-2 bg-emerald-400 hover:bg-emerald-500 text-slate-950 font-black text-xs uppercase tracking-widest px-5 py-3.5 rounded-2xl border-2 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:translate-y-1 active:shadow-none transition-all w-full sm:w-auto"
+          >
+            <Download size={16} /> Export Semua (2 Sheet)
+          </button>
         </div>
       </div>
 
-      {/* STATS SUMMARY BUBBLES */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-[2.5rem] border-2 border-slate-100 flex items-center gap-6 shadow-sm">
-          <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
-             <Users size={24} />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Data</p>
-            <p className="text-2xl font-black text-slate-900 leading-none">{currentList.length}</p>
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-[2.5rem] border-2 border-slate-100 flex items-center gap-6 shadow-sm">
-          <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
-             <UserCheck size={24} />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-emerald-500">Hadir</p>
-            <p className="text-2xl font-black text-slate-900 leading-none">{totalHadir}</p>
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-[2.5rem] border-2 border-slate-100 flex items-center gap-6 shadow-sm">
-          <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center">
-             <Clock size={24} />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-rose-500">Tidak Hadir</p>
-            <p className="text-2xl font-black text-slate-900 leading-none">{totalTidakHadir}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* TABS SELECTOR */}
-      <div className="flex gap-2 p-1.5 bg-slate-200/50 w-fit rounded-[2rem] border border-slate-200">
-        <button 
+      {/* --- LOCAL TABS NAVIGATION --- */}
+      <div className="flex border-4 border-slate-900 bg-slate-200 p-1.5 rounded-2xl shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+        <button
           onClick={() => setActiveTab("guru")}
-          className={`flex items-center gap-3 px-10 py-3.5 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'guru' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 font-black text-xs uppercase tracking-wider rounded-xl transition-all ${
+            activeTab === "guru"
+              ? "bg-blue-600 text-white shadow-inner border-2 border-slate-900"
+              : "text-slate-700 hover:bg-slate-300"
+          }`}
         >
-          <UserCheck size={14} /> Monitoring Guru
+          <Users size={16} /> Presensi Kehadiran Guru
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab("murid")}
-          className={`flex items-center gap-3 px-10 py-3.5 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'murid' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 font-black text-xs uppercase tracking-wider rounded-xl transition-all ${
+            activeTab === "murid"
+              ? "bg-blue-600 text-white shadow-inner border-2 border-slate-900"
+              : "text-slate-700 hover:bg-slate-300"
+          }`}
         >
-          <Users size={14} /> Monitoring Murid
+          <GraduationCap size={16} /> Presensi Kehadiran Murid
         </button>
       </div>
 
-      {/* DATA TABLE */}
-      <div className="bg-white rounded-[3.5rem] border-2 border-slate-100 overflow-hidden shadow-sm">
-        {loading ? (
-          <div className="p-32 text-center">
-            <div className="inline-block w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="font-black text-slate-400 uppercase text-xs tracking-[0.3em]">Memproses Database...</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-slate-50/50 border-b-2 border-slate-50">
-                  <th className="p-8 text-left text-[10px] font-black uppercase text-slate-400 tracking-widest">Informasi Personal</th>
-                  <th className="p-8 text-center text-[10px] font-black uppercase text-slate-400 tracking-widest">Waktu & Tanggal</th>
-                  <th className="p-8 text-center text-[10px] font-black uppercase text-slate-400 tracking-widest">{activeTab === 'guru' ? 'Mapel' : 'Rombel'}</th>
-                  <th className="p-8 text-center text-[10px] font-black uppercase text-slate-400 tracking-widest">Status</th>
+      {/* --- DYNAMIC PREVIEW DATA --- */}
+      {activeTab === "guru" ? (
+        <div className="bg-white p-6 rounded-[2.5rem] border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] overflow-x-auto animate-in fade-in duration-200">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b-2 border-slate-900 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                <th className="pb-3">Nama Guru</th>
+                <th className="pb-3 text-center">Status</th>
+                <th className="pb-3 text-center">Hadir</th>
+                <th className="pb-3 text-center">Izin</th>
+                <th className="pb-3 text-center">Sakit</th>
+                <th className="pb-3 text-center">Alfa</th>
+                <th className="pb-3 text-right">Rasio Hadir</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-bold text-xs">
+              {dataHadirGuru.map((guru, idx) => (
+                <tr key={idx} className="hover:bg-slate-50">
+                  <td className="py-3.5 text-slate-900 font-black uppercase">{guru.nama}</td>
+                  <td className="py-3.5 text-center text-slate-500 text-[10px]"><span className="border px-2 py-0.5 rounded bg-slate-50 font-mono">{guru.pns}</span></td>
+                  <td className="py-3.5 text-center text-emerald-600 font-mono">{guru.hadir} Hari</td>
+                  <td className="py-3.5 text-center text-amber-500 font-mono">{guru.izin}</td>
+                  <td className="py-3.5 text-center text-blue-500 font-mono">{guru.sakit}</td>
+                  <td className="py-3.5 text-center text-rose-500 font-mono">{guru.alfa}</td>
+                  <td className="py-3.5 text-right font-black font-mono text-blue-600">{guru.persen}</td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {currentList.map((item: any, idx: number) => (
-                  <tr key={idx} className="hover:bg-slate-50/50 transition-all group">
-                    <td className="p-8">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center font-black text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">
-                          {item.nama.charAt(0)}
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[13px] font-black text-slate-900 uppercase leading-none mb-1">{item.nama}</span>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
-                            {activeTab === 'guru' ? `NIP: ${item.nip}` : `NISN: ${item.nisn} • ${item.gender}`}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="p-8 text-center">
-                      <div className="inline-flex flex-col items-center p-3 bg-slate-50 rounded-2xl border border-slate-100 min-w-[100px]">
-                        <span className="text-[10px] font-black text-slate-900 leading-none">{item.tanggal}</span>
-                        <span className="text-[8px] font-bold text-slate-400 uppercase mt-1">Tgl Laporan</span>
-                      </div>
-                    </td>
-                    <td className="p-8 text-center font-black text-slate-900 text-xs uppercase tracking-tighter">
-                      {activeTab === 'guru' ? (item.mapel || '-') : item.rombel}
-                    </td>
-                    <td className="p-8">
-                      <div className="flex justify-center">
-                        <span className={`px-6 py-2 rounded-2xl text-[9px] font-black uppercase tracking-[0.1em] border-2 shadow-sm ${
-                          item.status === 'Hadir' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                          item.status === 'Izin' || item.status === 'Sakit' ? 'bg-amber-50 text-amber-600 border-amber-100' : 
-                          'bg-rose-50 text-rose-600 border-rose-100'
-                        }`}>
-                          {item.status || 'Alfa'}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {currentList.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="p-32 text-center">
-                       <p className="text-xs font-black text-slate-300 uppercase tracking-[0.4em]">Data Tidak Ditemukan</p>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="bg-white p-6 rounded-[2.5rem] border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] overflow-x-auto animate-in fade-in duration-200">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b-2 border-slate-900 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                <th className="pb-3">Tingkat Kelas pararel</th>
+                <th className="pb-3 text-center">Daya Tampung</th>
+                <th className="pb-3 text-center">Rerata Hadir</th>
+                <th className="pb-3 text-center">Izin (%)</th>
+                <th className="pb-3 text-center">Sakit (%)</th>
+                <th className="pb-3 text-center">Alfa (%)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-bold text-xs">
+              {dataHadirMurid.map((murid, idx) => (
+                <tr key={idx} className="hover:bg-slate-50">
+                  <td className="py-3.5 text-slate-900 font-black uppercase">{murid.kelas}</td>
+                  <td className="py-3.5 text-center text-slate-600 font-mono">{murid.totalSiswa} Siswa</td>
+                  <td className="py-3.5 text-center text-emerald-600 font-black font-mono">{murid.hadir}%</td>
+                  <td className="py-3.5 text-center text-amber-500 font-mono">{murid.izin}%</td>
+                  <td className="py-3.5 text-center text-blue-500 font-mono">{murid.sakit}%</td>
+                  <td className="py-3.5 text-center text-rose-500 font-black font-mono">{murid.alfa}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

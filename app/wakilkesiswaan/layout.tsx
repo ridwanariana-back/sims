@@ -55,17 +55,23 @@ export default function KepalaSekolahLayout({
           <Link href="/wakilkesiswaan" className={getLinkStyle('/wakilkesiswaan')}>
             Dashboard
           </Link>
+          <Link href="/wakilkesiswaan/dataguru" className={getLinkStyle('/wakilkesiswaan/dataguru')}>
+            Data Guru
+          </Link>
           <Link href="/wakilkesiswaan/datamurid" className={getLinkStyle('/wakilkesiswaan/datamurid')}>
             Data Murid
           </Link>
           <Link href="/wakilkesiswaan/kedisiplinan" className={getLinkStyle('/wakilkesiswaan/kedisiplinan')}>
             Catatan Kedisiplinan
           </Link>
-          <Link href="/wakilkesiswaan/rekap-nilai" className={getLinkStyle('/wakilkesiswaan/rekap-nilai')}>
-            Rekap Nilai Murid
-          </Link>
           <Link href="/wakilkesiswaan/kehadiran" className={getLinkStyle('/wakilkesiswaan/kehadiran')}>
-            Daftar Hadir Murid
+            Kehadiran
+          </Link>
+          <Link href="/wakilkesiswaan/prestasi" className={getLinkStyle('/wakilkesiswaan/prestasi')}>
+            Prestasi
+          </Link>
+          <Link href="/wakilkesiswaan/alumni" className={getLinkStyle('/wakilkesiswaan/alumni')}>
+            Alumni
           </Link>
 
       <div className="pt-6 pb-2 px-4 text-[10px] font-black text-slate-500 uppercase border-t border-slate-800 mt-4">

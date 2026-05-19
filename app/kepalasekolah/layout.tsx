@@ -71,7 +71,13 @@ export default function KepalaSekolahLayout({
             Jadwal Pelajaran
           </Link>
           <Link href="/kepalasekolah/kehadiran" className={getLinkStyle('/kepalasekolah/kehadiran')}>
-            Daftar Hadir
+            Kehadiran
+          </Link>
+          <Link href="/kepalasekolah/prestasi" className={getLinkStyle('/kepalasekolah/prestasi')}>
+            Prestasi
+          </Link>
+          <Link href="/kepalasekolah/alumni" className={getLinkStyle('/kepalasekolah/alumni')}>
+            Alumni
           </Link>
 
       <div className="pt-6 pb-2 px-4 text-[10px] font-black text-slate-500 uppercase border-t border-slate-800 mt-4">
