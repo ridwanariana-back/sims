@@ -1,29 +1,63 @@
-// app/guru/riwayat-nilai/page.tsx
-
 import { auth } from "@/auth";
 import { sql } from "@vercel/postgres";
 import { redirect } from "next/navigation";
-import { NotebookText, BookOpen, User, ClipboardCheck } from "lucide-react";
-import ClientRiwayatTable from "@/components/ClientRiwayatTable"; // Kita pindahkan pencarian & pagination ke client component terpisah
+import { NotebookText, ClipboardCheck } from "lucide-react";
+import ClientRiwayatTable from "@/components/ClientRiwayatTable";
 import { getTahunAjaranDinamis } from "@/lib/actions";
 
 export default async function RiwayatNilaiPage() {
   const session = await auth();
 
   // Proteksi Route: Hanya Guru yang bisa akses
-  if (!session?.user || session.user.role !== "kepalasekolah") {
+  if (!session?.user || session.user.role?.toLowerCase() !== "kepalasekolah") {
     redirect("/");
   }
 
-  const nipGuru = session.user.username; // Ambil NIP Guru dari session username
   const tahunAjaranAktif = await getTahunAjaranDinamis();
 
-  // Ambil Mapel Guru yang sedang login
-  const guruRes = await sql`SELECT mapel FROM guru WHERE nip = ${nipGuru}`;
-  const guruData = guruRes.rows[0];
-  const mapelGuru = guruData?.mapel || "";
+  // 1. Ambil sekolah_id dan User ID dari session login
+  const sId = session.user.sekolah_id || (session.user as any).sekolahId;
+  const sekolahIdInt = sId ? parseInt(sId.toString(), 10) : null;
+  const userIdFromSession = session.user.id;
 
-  // Query langsung mengambil seluruh riwayat nilai yang pernah diinput oleh guru ini
+  if (!sekolahIdInt || !userIdFromSession) {
+    return (
+      <div className="p-6 text-center text-rose-600 font-bold bg-white rounded-3xl border-2 border-rose-100 m-8">
+        Error: Autentikasi Gagal atau ID Sekolah tidak ditemukan.
+      </div>
+    );
+  }
+
+  // 2. Ambil data asli guru dan mapel menggunakan INNER JOIN satu pintu demi efisiensi
+  const guruRes = await sql`
+    SELECT g.id, g.mapel 
+    FROM users u
+    INNER JOIN guru g ON u.guru_id = g.id
+    WHERE u.id = ${userIdFromSession}
+  `;
+  const guruData = guruRes.rows[0];
+
+  if (!guruData) {
+    return (
+      <div className="p-6 text-center text-rose-600 font-bold bg-white rounded-3xl border-2 border-rose-100 m-8">
+        Error: Profil Guru tidak ditemukan di sistem database.
+      </div>
+    );
+  }
+
+  const guruIdInt = guruData.id; // ID Integer asli dari tabel guru
+  const mapelGuru = guruData.mapel || "";
+
+  // 💡 AMBIL NAMA MAPEL ASLI UNTUK TEKS DI HEADER & TABEL
+  let namaMapelTxt = "Mata Pelajaran";
+  if (mapelGuru) {
+    const mapelNameRes = await sql`SELECT nama_mapel FROM mapel WHERE id = ${parseInt(mapelGuru.toString(), 10)}`;
+    if (mapelNameRes.rows.length > 0) {
+      namaMapelTxt = mapelNameRes.rows[0].nama_mapel;
+    }
+  }
+
+  // 3. Query mengambil seluruh riwayat nilai, dikunci dengan sekolah_id dan guru_id (Integer)
   const riwayatRes = await sql`
     SELECT 
       n.id as nilai_id,
@@ -33,20 +67,25 @@ export default async function RiwayatNilaiPage() {
       n.nilai_angka,
       n.tahun_ajaran,
       n.semester,
-      n.mapel,
+      n.mapel, -- Ini menampung string ID
       m.nama as nama_murid,
       m.nisn
     FROM nilai n
     JOIN murid m ON n.murid_id = m.id
-    WHERE n.guru_id::text = ${nipGuru}::text
+    WHERE n.guru_id = ${guruIdInt}          
+      AND n.sekolah_id = ${sekolahIdInt}    
       AND n.mapel = ${mapelGuru}
     ORDER BY n.id DESC
   `;
 
-  const dataRiwayat = riwayatRes.rows;
+  // 💡 SISIPKAN PROPERTI nama_mapel KE TIAP BARIS DATA SEBELUM DIKIRIM KE CLIENT
+  const dataRiwayat = riwayatRes.rows.map((row) => ({
+    ...row,
+    nama_mapel: namaMapelTxt, // Menyisipkan nama asli teks mapel hasil query di atas
+  }));
 
   return (
-    <div className="space-y-6 p-2">
+    <div className="space-y-6 p-2 text-left">
       {/* HEADER SECTION */}
       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-sm">
         <div className="flex items-center gap-6">
@@ -55,7 +94,10 @@ export default async function RiwayatNilaiPage() {
           </div>
           <div>
             <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">Riwayat Input Nilai</h1>
-            <p className="text-slate-500 font-bold uppercase tracking-widest text-xs mt-2 italic">Arsip seluruh nilai yang pernah Anda berikan</p>
+            <p className="text-slate-500 font-bold uppercase tracking-widest text-xs mt-2 italic">
+              {/* 💡 GANTI JADI namaMapelTxt */}
+              Arsip seluruh nilai mata pelajaran {namaMapelTxt} yang pernah Anda berikan
+            </p>
           </div>
         </div>
       </div>
@@ -69,7 +111,7 @@ export default async function RiwayatNilaiPage() {
         </div>
       </div>
 
-      {/* Lempar data riwayat dari DB ke komponen client untuk fitur search & pagination */}
+      {/* Lempar data riwayat yang sudah di-mapping aman ke komponen client */}
       <ClientRiwayatTable initialData={dataRiwayat} />
     </div>
   );

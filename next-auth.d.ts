@@ -9,7 +9,8 @@ declare module "next-auth" {
       username: string;
       isWaliKelas: boolean;
       kelasWali: string | null;
-      tahunAjaran: string | null; // Data tahun ajaran dari tabel wali_kelas[cite: 3]
+      tahunAjaran: string | null;
+      sekolah_id?: number | null;
     } & DefaultSession["user"];
   }
 
@@ -18,6 +19,7 @@ declare module "next-auth" {
     role?: string;
     username?: string;
     image?: string;
+    sekolah_id?: number | null;
   }
 }
 
@@ -28,6 +30,7 @@ declare module "next-auth/jwt" {
     username: string;
     isWaliKelas?: boolean;
     kelasWali?: string | null;
-    tahunAjaran?: string | null; // Data tahun ajaran di dalam token[cite: 3]
+    tahunAjaran?: string | null;
+    sekolah_id?: number | null;
   }
 }

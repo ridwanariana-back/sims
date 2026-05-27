@@ -3,6 +3,21 @@ import Credentials from 'next-auth/providers/credentials';
 import { sql } from '@vercel/postgres';
 import bcrypt from 'bcryptjs';
 
+// 1. Deklarasi Modul TypeScript agar tidak error saat build (Type Safety)
+declare module 'next-auth' {
+  interface Session {
+    user: {
+      id: string;
+      role: string;
+      username: string;
+      sekolah_id?: number;
+      isWaliKelas: boolean;
+      kelasWali: string | null;
+      tahunAjaran: string | null;
+    } & DefaultSession['user']
+  }
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
@@ -10,9 +25,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const { username, password } = credentials;
 
         const userQuery = await sql`
-          SELECT id, name, username, role, password, image 
+          SELECT id, name, username, role, password, image, sekolah_id 
           FROM users 
-          WHERE username = ${username as string}
+          WHERE LOWER(username) = LOWER(${username as string})
         `;
         const user = userQuery.rows[0];
 
@@ -22,11 +37,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (passwordsMatch) {
           return {
-            id: user.id.toString(), // Pastikan menjadi string
+            id: user.id.toString(),
             name: user.name,
             username: user.username,
-            role: user.role,
+            role: user.role, 
             image: user.image,
+            sekolah_id: user.sekolah_id, 
           };
         }
 
@@ -37,18 +53,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
-      const role = auth?.user?.role;
+      const role = auth?.user?.role?.toLowerCase(); 
       
       const isGuruPage = nextUrl.pathname.startsWith('/guru');
       const isOperatorPage = nextUrl.pathname.startsWith('/operator');
-      const isTUPage = nextUrl.pathname.startsWith('/tatausaha');
+      const isTUPage = nextUrl.pathname.startsWith('/tatausaha'); 
       const isKepalaPage = nextUrl.pathname.startsWith('/kepalasekolah');
       const isKurikulumPage = nextUrl.pathname.startsWith('/wakilkurikulum');
       const isKesiswaanPage = nextUrl.pathname.startsWith('/wakilkesiswaan');
       
       if (isGuruPage && (!isLoggedIn || role !== 'guru')) return false;
       if (isOperatorPage && (!isLoggedIn || role !== 'operator')) return false;
-      if (isTUPage && (!isLoggedIn || role !== 'tatausaha')) return false;
+      if (isTUPage && (!isLoggedIn || role !== 'tata_usaha')) return false; 
       if (isKepalaPage && (!isLoggedIn || role !== 'kepalasekolah')) return false;
       if (isKurikulumPage && (!isLoggedIn || role !== 'wakilkurikulum')) return false;
       if (isKesiswaanPage && (!isLoggedIn || role !== 'wakilkesiswaan')) return false;
@@ -56,7 +72,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (isLoggedIn && nextUrl.pathname === '/') {
         let destination = '/';
         if (role === 'operator') destination = '/operator';
-        else if (role === 'tatausaha') destination = '/tatausaha';
+        else if (role === 'tata_usaha') destination = '/tatausaha'; 
         else if (role === 'guru') destination = '/guru';
         else if (role === 'kepalasekolah') destination = '/kepalasekolah';
         else if (role === 'wakilkurikulum') destination = '/wakilkurikulum';
@@ -75,15 +91,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.username = user.username as string;
         token.name = user.name as string;
         token.picture = user.image as string;
+        
+        const rawSekolahId = (user as any).sekolah_id || (user as any).sekolahId;
+        token.sekolah_id = rawSekolahId ? parseInt(rawSekolahId.toString()) : null;
 
-        // CEK DATA WALI KELAS & TAHUN AJARAN[cite: 2]
-        if (user.role === 'guru' && user.username) {
+        if (user.role?.toLowerCase() === 'guru' && user.username) {
           try {
             const guruRes = await sql`SELECT id FROM guru WHERE nip = ${user.username as string}`;
             const guruId = guruRes.rows[0]?.id;
 
             if (guruId) {
-              // Mengambil rombel DAN tahun_ajaran agar riwayat tidak nyampur[cite: 2]
               const waliRes = await sql`
                 SELECT rombel, tahun_ajaran 
                 FROM wali_kelas 
@@ -94,7 +111,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               if (waliRes.rows.length > 0) {
                 token.isWaliKelas = true;
                 token.kelasWali = waliRes.rows[0].rombel;
-                token.tahunAjaran = waliRes.rows[0].tahun_ajaran; // Simpan ke token[cite: 2]
+                token.tahunAjaran = waliRes.rows[0].tahun_ajaran;
               } else {
                 token.isWaliKelas = false;
                 token.kelasWali = null;
@@ -110,9 +127,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
 
-      if (trigger === "update" && session?.user) {
-        if (session.user.name) token.name = session.user.name;
-        if (session.user.image) token.picture = session.user.image;
+      // 🔥 PERBAIKAN UTAMA: Ambil langsung dari root session object yang dikirim client
+      if (trigger === "update" && session) {
+        if (session.name) token.name = session.name;
+        if (session.image) token.picture = session.image;
       }
 
       return token;
@@ -124,12 +142,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = token.role as string;
         session.user.username = token.username as string;
         session.user.name = token.name as string;
-        session.user.image = token.picture as string;
+        session.user.image = token.picture as string; // Menjaga gambar tetap update di client-side
         
-        // Melempar data wali kelas dan tahun ajaran ke session user[cite: 2]
+        const tokenSekolahId = token.sekolah_id || (token as any).sekolahId;
+        session.user.sekolah_id = tokenSekolahId ? parseInt(tokenSekolahId.toString()) : undefined;
+        
         session.user.isWaliKelas = !!token.isWaliKelas;
         session.user.kelasWali = (token.kelasWali as string) || null;
-        session.user.tahunAjaran = (token.tahunAjaran as string) || null; // Sekarang tersedia di client[cite: 2]
+        session.user.tahunAjaran = (token.tahunAjaran as string) || null;
       }
       return session;
     }

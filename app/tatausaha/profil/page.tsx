@@ -1,4 +1,5 @@
-// app/[role]/profil/page.tsx
+// app/tatausaha/profil/page.tsx
+
 import { auth } from "@/auth";
 import EditProfileModal from "@/components/EditProfileModal";
 import ChangePasswordModal from "@/components/ChangePasswordModal";

@@ -5,33 +5,42 @@ import {
   Search, Trash2, Edit, ChevronLeft, ChevronRight, 
   X, Save, Calendar, Fingerprint, BadgeCheck, User2 
 } from "lucide-react";
-import { DAFTAR_MAPEL } from "./AddGuruModal";
 import { deleteGuru, updateGuru } from "@/lib/actions";
 import { useRouter } from "next/navigation";
 
-export default function GuruTable({ initialData }: { initialData: any[] }) {
+interface GuruTableProps {
+  initialData: any[];
+  listMapel: any[]; // Menerima data mapel dinamis dari database sekolah
+}
+
+export default function GuruTable({ initialData, listMapel }: GuruTableProps) {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   
-  // States untuk modal edit
   const [editingGuru, setEditingGuru] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  // 1. Filter Data
-  const filteredGuru = initialData.filter((guru) =>
-    guru.nama.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    guru.nip.includes(searchTerm)
-  );
+  // Filter pencarian berdasarkan nama, NIP, atau ID mapel yang cocok dengan teks inputan
+  const filteredGuru = initialData.filter((guru) => {
+    // Cari nama mapel asli dari listMapel untuk keperluan filtering pencarian text
+    const namaMapelAsli = listMapel.find(
+      (m) => m.id.toString() === guru.mapel?.toString()
+    )?.nama_mapel || "";
 
-  // 2. Pagination Logic
+    return (
+      guru.nama.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      guru.nip.includes(searchTerm) ||
+      namaMapelAsli.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  });
+
   const totalPages = Math.ceil(filteredGuru.length / rowsPerPage);
   const currentItems = filteredGuru.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
-  // 3. Fungsi Hapus (Delete Guru + User secara otomatis)
   const handleDelete = async (id: number) => {
-    if (confirm("PERHATIAN: Menghapus data ini akan menghapus AKUN LOGIN guru terkait. Lanjutkan?")) {
+    if (confirm("PERHATIAN: Menghapus data ini akan menghapus AKUN LOGIN guru terkait di sekolah ini. Lanjutkan?")) {
       setLoading(true);
       const res = await deleteGuru(id);
       if (res.success) {
@@ -44,7 +53,6 @@ export default function GuruTable({ initialData }: { initialData: any[] }) {
     }
   };
 
-  // 4. Fungsi Update (Edit)
   const handleUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -80,7 +88,7 @@ export default function GuruTable({ initialData }: { initialData: any[] }) {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 h-5 w-5" />
           <input 
             type="text" 
-            placeholder="Cari Nama atau NIP..." 
+            placeholder="Cari Nama, NIP atau Mapel..." 
             className="w-full pl-12 pr-4 py-3 border-2 rounded-2xl outline-none focus:border-blue-500 transition-all shadow-sm font-black text-slate-900" 
             value={searchTerm} 
             onChange={(e) => {setSearchTerm(e.target.value); setCurrentPage(1)}} 
@@ -104,7 +112,6 @@ export default function GuruTable({ initialData }: { initialData: any[] }) {
             <tbody className="divide-y divide-slate-100">
               {currentItems.map((guru) => (
                 <tr key={guru.id} className="hover:bg-slate-50 transition-all group">
-                  {/* KOLOM PENDIDIK */}
                   <td className="px-6 py-6 align-top">
                     <div className="font-black text-slate-900 text-sm leading-tight uppercase mb-1">{guru.nama}</div>
                     <div className="inline-block px-2 py-0.5 bg-blue-600 text-white text-[9px] font-black rounded uppercase tracking-tighter shadow-sm shadow-blue-200">
@@ -112,7 +119,6 @@ export default function GuruTable({ initialData }: { initialData: any[] }) {
                     </div>
                   </td>
 
-                  {/* KOLOM IDENTITAS (Grid) */}
                   <td className="px-6 py-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 min-w-[300px]">
                       <div className="flex items-center gap-2">
@@ -142,18 +148,20 @@ export default function GuruTable({ initialData }: { initialData: any[] }) {
                     </div>
                   </td>
 
-                  {/* KOLOM STATUS */}
                   <td className="px-6 py-6 align-top">
                     <div className="text-sm font-black text-slate-900 uppercase leading-none">{guru.status}</div>
-                    <div className="text-[11px] text-blue-800 font-black mt-1 leading-tight">{guru.mapel}</div>
+                    
+                    {/* 💡 SINKRONISASI TAMPILAN: Cari nama_mapel berdasarkan ID yang tersimpan */}
+                    <div className="text-[11px] text-blue-800 font-black mt-1 leading-tight">
+                      {listMapel.find((m) => m.id.toString() === guru.mapel?.toString())?.nama_mapel || guru.mapel || "Belum Memilih"}
+                    </div>
+
                     <div className="mt-2 flex items-center gap-1 text-[9px] font-black text-slate-400 uppercase tracking-tighter">
                        <User2 size={10} /> {guru.gender}
                     </div>
                   </td>
 
-                  {/* KOLOM WALI KELAS (Read Only) */}
                   <td className="px-6 py-6 align-top">
-                    {/* Sekarang membaca field wali_kelas_rombel hasil JOIN */}
                     {guru.wali_kelas_rombel ? (
                       <div className="flex flex-col items-start gap-1">
                         <span className="text-[9px] font-black text-slate-900 uppercase bg-yellow-400 px-1 rounded">
@@ -170,7 +178,6 @@ export default function GuruTable({ initialData }: { initialData: any[] }) {
                     )}
                   </td>
 
-                  {/* KOLOM AKSI (Icon Sekolah Dihapus) */}
                   <td className="px-6 py-6">
                     <div className="flex justify-center gap-2">
                       <button 
@@ -267,10 +274,16 @@ export default function GuruTable({ initialData }: { initialData: any[] }) {
                 </div>
               </div>
 
+              {/* 🚩 OPTION VALUE MENGGUNAKAN ID MAPEL */}
               <div className="space-y-1 md:col-span-2">
                 <label className="text-xs font-black text-slate-500 uppercase">Mata Pelajaran</label>
                 <select name="mapel" defaultValue={editingGuru.mapel} className="w-full border-2 p-3 rounded-xl font-black bg-white text-slate-900">
-                  {DAFTAR_MAPEL.map((m) => <option key={m} value={m}>{m}</option>)}
+                  <option value="">-- Pilih Mata Pelajaran --</option>
+                  {listMapel.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nama_mapel} ({m.kode_mapel})
+                    </option>
+                  ))}
                 </select>
               </div>
 

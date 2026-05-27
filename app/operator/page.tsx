@@ -1,5 +1,7 @@
+// app/operator/page.tsx
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
+import { sql } from '@vercel/postgres';
 import { getOperatorStats } from '@/lib/actions';
 import { 
   Users, 
@@ -8,46 +10,69 @@ import {
   ArrowRight, 
   LayoutDashboard, 
   ShieldCheck,
+  School,
   Zap
 } from 'lucide-react';
 import Link from 'next/link';
 
 export default async function OperatorDashboardPage() {
-  // 1. Proteksi Halaman & Ambil Session
+  // 1. Proteksi Halaman & Ambil Session di Server Side
   const session = await auth();
   
-  if (!session || session.user.role !== 'operator') {
+  if (!session || session.user.role?.toLowerCase() !== 'operator') {
     redirect('/');
   }
 
-  // 2. Ambil Data Real-time dari Database
-  const stats = await getOperatorStats();
+  // 2. Ambil sekolah_id dari session dan konversi ke Integer
+  const sId = session.user.sekolah_id || (session.user as any).sekolahId;
+  const sekolahIdInt = sId ? parseInt(sId.toString(), 10) : null;
+
+  // Jika user tidak punya sekolah_id valid, kunci aksesnya
+  if (!sekolahIdInt) {
+    return (
+      <div className="p-6 text-center font-bold text-rose-600 uppercase">
+        Error: Akun operator Anda tidak terikat dengan ID Sekolah mana pun.
+      </div>
+    );
+  }
+
+  // == TAMBAHAN: Ambil data nama sekolah secara dinamis ==
+    const profilSekolah = await sql`
+      SELECT nama_sekolah FROM sekolah WHERE id = ${sekolahIdInt}
+    `;
+    // Jika nama sekolah ditemukan di DB, pakai namanya. Jika tidak, pakai fallback text.
+    const namaSekolah = profilSekolah.rows[0]?.nama_sekolah || "Tidak Ada Nama Sekolah!";
+
+  // 3. Ambil Data Real-time dari Database (Kirim sekolahIdInt sebagai filter)
+  const stats = await getOperatorStats(sekolahIdInt);
 
   return (
-    <div className="p-6 bg-slate-50 min-h-screen">
+    <div className="p-4 md:p-6 bg-slate-50 min-h-screen">
       {/* Header Info */}
-      <div className="mb-8 flex justify-between items-end">
+      <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <div className="flex items-center gap-2 text-indigo-600 mb-1">
             <LayoutDashboard size={18} />
             <span className="text-[10px] font-black uppercase tracking-[0.2em]">Sistem Informasi Manajemen Sekolah</span>
           </div>
-          <h1 className="text-3xl font-black text-slate-800 uppercase tracking-tight">Dashboard Operator</h1>
+          <h1 className="text-2xl md:text-3xl font-black text-slate-800 uppercase tracking-tight">Dashboard Operator</h1>
           <p className="text-sm text-slate-500 font-medium">
             Selamat datang kembali, <span className="text-indigo-600 font-bold">{session.user.name}</span>
           </p>
         </div>
+
+        {/* == PENANDA SEKOLAH AKTIF == */}
+                <div className="bg-blue-600 px-5 py-3 rounded-2xl shadow-sm text-white flex items-center gap-3 self-start md:self-auto">
+                  <School size={20} className="text-blue-200" />
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-blue-200">Sekolah Aktif</p>
+                    <p className="text-sm font-bold uppercase tracking-wide">{namaSekolah}</p>
+                  </div>
+                </div>
         
-        <div className="hidden md:block text-right">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status Server</p>
-          <div className="flex items-center gap-2 text-emerald-500 font-bold text-sm">
-            <div className="h-2 w-2 bg-emerald-500 rounded-full animate-pulse" />
-            Sistem Optimal
-          </div>
-        </div>
       </div>
 
-      {/* Stats Grid - Menampilkan data dari variable 'stats' */}
+      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {/* Total Akun */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 group hover:shadow-md transition-all">
@@ -61,7 +86,7 @@ export default async function OperatorDashboardPage() {
           <p className="text-3xl font-black text-slate-800">{stats.totalUsers}</p>
         </div>
 
-        {/* Aktivasi Tertunda (Guru tanpa akun) */}
+        {/* Aktivasi Tertunda */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 group hover:shadow-md transition-all">
           <div className="flex justify-between items-start mb-4">
             <div className="p-3 bg-amber-50 rounded-xl text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors">
@@ -130,7 +155,7 @@ export default async function OperatorDashboardPage() {
         </div>
 
         {/* Info Box Biru (Notifikasi Penting) */}
-        <div className="bg-indigo-600 rounded-3xl p-8 text-white shadow-xl shadow-indigo-200 relative overflow-hidden flex flex-col justify-between">
+        <div className="bg-indigo-600 rounded-3xl p-6 md:p-8 text-white shadow-xl shadow-indigo-200 relative overflow-hidden flex flex-col justify-between min-h-[250px]">
           {/* Aksesoris Background */}
           <div className="absolute -right-8 -top-8 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
           

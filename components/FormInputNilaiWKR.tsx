@@ -7,12 +7,14 @@ import { Save, ArrowLeft, BookOpen, Calendar, Calculator, Trash2, User } from "l
 import Link from "next/link";
 
 export default function FormInputNilai({ 
-  muridId, guruId, mapelDefault, semesterDefault, dataLama, 
-  detailMurid,tahunAjaran // Tambahkan prop ini untuk menerima data nama, kelas, nisn, rombel
+  muridId, guruId, sekolahId, mapelDefault, namaMapelTxt, semesterDefault, dataLama, 
+  detailMurid, tahunAjaran 
 }: { 
   muridId: number, 
-  guruId: any, 
-  mapelDefault: string, 
+  guruId: number, 
+  sekolahId: number, 
+  mapelDefault: string, // 💡 Ini menampung ID Mapel string
+  namaMapelTxt: string,  // 💡 Terima properti nama asli teks mapel
   semesterDefault: string, 
   dataLama?: any,
   detailMurid: { nama: string, nisn: string, kelas: string, rombel: string },
@@ -21,13 +23,11 @@ export default function FormInputNilai({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  // State untuk komponen nilai
   const [harian, setHarian] = useState<number>(dataLama?.nilai_harian || 0);
   const [mid, setMid] = useState<number>(dataLama?.nilai_mid || 0);
   const [uas, setUas] = useState<number>(dataLama?.nilai_uas || 0);
   const [nilaiAkhir, setNilaiAkhir] = useState<number>(dataLama?.nilai_angka || 0);
 
-  // Fungsi validasi: Hanya angka, hapus nol di depan, maks 100
   const handleInputChange = (val: string, setter: (n: number) => void) => {
     const cleanValue = val.replace(/[^0-9]/g, "");
     const numValue = cleanValue === "" ? 0 : parseInt(cleanValue, 10);
@@ -43,11 +43,13 @@ export default function FormInputNilai({
     e.preventDefault();
     setLoading(true);
     const formData = new FormData(e.currentTarget);
+    
     const payload = {
       id: dataLama?.id || null,
       murid_id: muridId,
       guru_id: guruId,
-      mapel: mapelDefault,
+      sekolah_id: sekolahId, 
+      mapel: mapelDefault, // 💡 Tetap aman mengirim ID Mapel ke database!
       semester: semesterDefault,
       tahun_ajaran: tahunAjaran,
       nilai_harian: harian,
@@ -65,7 +67,7 @@ export default function FormInputNilai({
       });
       if (res.ok) {
         alert("Data berhasil disimpan!");
-        router.push("/wakilkurikulum/inputnilai");
+        router.push("/wakilkurikulum/inputnilai/riwayat");
         router.refresh();
       }
     } catch (error) {
@@ -76,8 +78,8 @@ export default function FormInputNilai({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Profil Murid Header - SEKARANG ADA ROMBEL */}
+    <div className="space-y-6 text-left">
+      {/* Profil Murid Header */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-5">
         <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600">
           <User size={32} strokeWidth={2.5} />
@@ -104,19 +106,20 @@ export default function FormInputNilai({
             <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
               <BookOpen size={16} className="text-blue-500" /> Mata Pelajaran
             </label>
-            <input type="text" value={mapelDefault} readOnly className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold cursor-not-allowed uppercase text-sm" />
+            {/* 💡 SEKARANG VALUE MENGGUNAKAN NAMA MAPEL ASLI AGAR CANTIK DI UI */}
+            <input 
+              type="text" 
+              value={namaMapelTxt} 
+              readOnly 
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold cursor-not-allowed uppercase text-sm" 
+            />
           </div>
 
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
               <Calendar size={16} className="text-blue-500" /> Tahun Ajaran
             </label>
-            <input 
-              type="text" 
-              value={tahunAjaran} 
-              readOnly 
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold cursor-not-allowed text-sm" 
-            />
+            <input type="text" value={tahunAjaran} readOnly className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold cursor-not-allowed text-sm" />
           </div>
 
           <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -154,27 +157,28 @@ export default function FormInputNilai({
           <Link href="/wakilkurikulum/inputnilai" className="flex-1 flex items-center justify-center gap-2 py-3.5 border-2 border-slate-100 rounded-xl font-bold hover:bg-slate-50 text-slate-600 transition-all text-sm">
             <ArrowLeft size={18} /> KEMBALI
           </Link>
-          {/* TOMBOL HAPUS - Muncul hanya jika sedang EDIT data */}
-  {dataLama?.id && (
-    <button
-      type="button" // Pakai type button supaya tidak trigger submit form
-      onClick={async () => {
-        if (confirm("Hapus data nilai murid ini?")) {
-          const res = await deleteNilai(dataLama.id);
-          if (res.success) {
-            alert("Nilai berhasil dihapus!");
-            router.push("/wakilkurikulum/inputnilai");
-            router.refresh();
-          } else {
-            alert("Gagal menghapus nilai.");
-          }
-        }
-      }}
-      className="flex-1 flex items-center justify-center gap-2 py-3.5 border-2 border-rose-100 bg-rose-50 text-rose-600 rounded-xl font-black hover:bg-rose-600 hover:text-white transition-all text-sm uppercase tracking-widest"
-    >
-      <Trash2 size={18} /> HAPUS
-    </button>
-  )}
+          
+          {dataLama?.id && (
+            <button
+              type="button"
+              onClick={async () => {
+                if (confirm("Hapus data nilai murid ini?")) {
+                  const res = await deleteNilai(dataLama.id, sekolahId);
+                  if (res.success) {
+                    alert("Nilai berhasil dihapus!");
+                    router.push("/wakilkurikulum/inputnilai/riwayat");
+                    router.refresh();
+                  } else {
+                    alert("Gagal menghapus nilai.");
+                  }
+                }
+              }}
+              className="flex-1 flex items-center justify-center gap-2 py-3.5 border-2 border-rose-100 bg-rose-50 text-rose-600 rounded-xl font-black hover:bg-rose-600 hover:text-white transition-all text-sm uppercase tracking-widest"
+            >
+              <Trash2 size={18} /> HAPUS
+            </button>
+          )}
+          
           <button type="submit" disabled={loading} className="flex-[2] flex items-center justify-center gap-2 py-3.5 bg-slate-900 text-white rounded-xl font-black hover:bg-blue-600 shadow-xl transition-all text-sm uppercase tracking-widest">
             <Save size={18} /> {loading ? "PROSES..." : "SIMPAN NILAI"}
           </button>

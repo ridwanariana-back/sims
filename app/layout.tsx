@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sistem Informasi Manajemen Sekolah SMA 1 Pemulutan Selatan",
-  description: "Sistem Informasi Manajemen Sekolah SMA 1 Pemulutan Selatan",
+  title: "Sistem Informasi Manajemen Sekolah",
+  description: "Sistem Informasi Manajemen Sekolah Multi Tenant",
 };
 
 export default function RootLayout({

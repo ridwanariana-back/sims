@@ -1,21 +1,15 @@
+// components/AddGuruModal.tsx
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { X, Save, UserPlus } from "lucide-react";
 
-// Daftar Mapel sesuai revisi project SIMS
-export const DAFTAR_MAPEL = [
-  "PAI & BudiPekerti", "PKN", "Bahasa Indonesia", "Bahasa Inggris", 
-  "Bahasa Inggris Tingkat Lanjut", "Matematika Wajib", "Matematika Tingkat Lanjut", 
-  "Fisika", "Fisika Mapel Pilihan", "Biologi", "Biologi Mapel Pilihan", 
-  "Kimia", "Kimia Mapel Pilihan", "Sejarah", "Sejarah Tingkat Lanjut", 
-  "Geografi", "Geografi Mapel Pilihan", "Ekonomi", "Ekonomi Mapel Pilihan", 
-  "Sosiologi", "Sosiologi Mapel Pilihan", "Seni Budaya", "Penjas Orkes", 
-  "PKWU", "Informatika", "Bimbingan Konseling"
-];
+interface AddGuruModalProps {
+  listMapel: any[]; // Menerima data mapel dinamis dari database sekolah
+}
 
-export default function AddGuruModal() {
+export default function AddGuruModal({ listMapel }: AddGuruModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -25,7 +19,7 @@ export default function AddGuruModal() {
     setLoading(true);
     const formData = new FormData(e.currentTarget);
     
-    // Kirim ke API route /api/guru
+    // Kirim data form ke API route /api/guru
     const res = await fetch('/api/guru', {
         method: 'POST',
         body: JSON.stringify(Object.fromEntries(formData))
@@ -36,7 +30,7 @@ export default function AddGuruModal() {
       setIsOpen(false);
       (e.target as HTMLFormElement).reset();
     } else {
-      alert("Gagal menyimpan data.");
+      alert("Gagal menyimpan data guru.");
     }
     setLoading(false);
   };
@@ -99,7 +93,7 @@ export default function AddGuruModal() {
                 <input name="tgl_lahir" type="date" required className="w-full border-2 p-3 rounded-xl outline-none focus:border-blue-500 transition-all font-bold text-slate-900" />
               </div>
 
-              {/* JENIS PEGAWAI (REVISI TERBARU) */}
+              {/* JENIS PEGAWAI */}
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Jenis Pegawai</label>
                 <select name="jenis" required className="w-full border-2 p-3 rounded-xl outline-none focus:border-blue-500 bg-white font-black text-xs uppercase text-slate-900">
@@ -122,14 +116,19 @@ export default function AddGuruModal() {
                 </select>
               </div>
 
-              {/* MATA PELAJARAN */}
-              <div className="space-y-1 md:col-span-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Mata Pelajaran Diampu</label>
-                <select name="mapel" required className="w-full border-2 p-3 rounded-xl outline-none focus:border-blue-500 bg-white font-black text-xs uppercase text-slate-900">
-                  <option value="">-- Pilih Mata Pelajaran --</option>
-                  {DAFTAR_MAPEL.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
+              {/* 🚩 MATA PELAJARAN DINAMIS DARI DATABASE */}
+<div className="space-y-1 md:col-span-2">
+  <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Mata Pelajaran Diampu</label>
+  <select name="mapel" required className="w-full border-2 p-3 rounded-xl outline-none focus:border-blue-500 bg-white font-black text-xs uppercase text-slate-900">
+    <option value="">-- Pilih Mata Pelajaran --</option>
+    {listMapel.map((m) => (
+      /* 💡 VALUE DIUBAH MENJADI ID MAPEL */
+      <option key={m.id} value={m.id}>
+        {m.nama_mapel} ({m.kode_mapel})
+      </option>
+    ))}
+  </select>
+</div>
 
               {/* SEKOLAH INDUK */}
               <div className="space-y-2 md:col-span-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">

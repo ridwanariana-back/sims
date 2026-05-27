@@ -1,14 +1,15 @@
+// app/api/nilai/route.ts
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    // Ambil data tambahan: nilai_harian, nilai_mid, dan nilai_uas
     const { 
       id, 
       murid_id, 
       guru_id, 
+      sekolah_id, // 💡 Ambil sekolah_id dari payload request
       mapel, 
       semester, 
       tahun_ajaran, 
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
     } = body;
 
     if (id) {
-      // MODE UPDATE: Perbarui semua komponen nilai
+      // MODE UPDATE: Kunci juga dengan sekolah_id demi proteksi ekstra
       await sql`
         UPDATE nilai SET 
           nilai_harian = ${nilai_harian},
@@ -29,14 +30,15 @@ export async function POST(req: Request) {
           nilai_angka = ${nilai_angka}, 
           tahun_ajaran = ${tahun_ajaran}, 
           keterangan = ${keterangan}
-        WHERE id = ${id}
+        WHERE id = ${id} AND sekolah_id = ${sekolah_id}
       `;
     } else {
-      // MODE INSERT: Masukkan data baru beserta rinciannya
+      // MODE INSERT: Sertakan kolom sekolah_id
       await sql`
         INSERT INTO nilai (
           murid_id, 
           guru_id, 
+          sekolah_id, -- 💡 Masukkan ke DB
           mapel, 
           semester, 
           tahun_ajaran, 
@@ -49,6 +51,7 @@ export async function POST(req: Request) {
         VALUES (
           ${murid_id}, 
           ${guru_id}, 
+          ${sekolah_id}, -- 💡 Berikan value-nya
           ${mapel}, 
           ${semester}, 
           ${tahun_ajaran}, 
@@ -64,21 +67,5 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("Database Error:", error);
     return NextResponse.json({ error: "Gagal memproses data" }, { status: 500 });
-  }
-}
-
-export async function DELETE(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
-    
-    if (!id) {
-        return NextResponse.json({ error: "ID tidak ditemukan" }, { status: 400 });
-    }
-
-    await sql`DELETE FROM nilai WHERE id = ${id}`;
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json({ error: "Gagal menghapus" }, { status: 500 });
   }
 }

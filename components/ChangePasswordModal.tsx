@@ -1,3 +1,5 @@
+// components/ChangePasswordModal.tsx
+
 "use client";
 
 import { useState } from "react";
@@ -22,7 +24,7 @@ export default function ChangePasswordModal() {
           <div className="relative bg-white p-8 rounded-xl shadow-2xl w-full max-w-md">
             <h3 className="text-xl font-bold mb-6 text-gray-800">Ganti Password Keamanan</h3>
             
-            <form action={async (formData) => {
+<form action={async (formData) => {
     const res = await changePassword(formData);
     if (res.success) {
       alert(res.success);

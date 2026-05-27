@@ -78,7 +78,7 @@ export default function NilaiTable({ initialData }: { initialData: any[] }) {
 <td className="p-4">
   <div className="flex items-center justify-center gap-2">
     {!murid.id_ganjil ? (
-      // PERBAIKAN: Arahkan ke /guru/inputnilai/[murid_id]?s=Ganjil
+      // PERBAIKAN: Arahkan ke /wakilkurikulum/inputnilai/[murid_id]?s=Ganjil
       <Link 
         href={`/wakilkurikulum/inputnilai/${murid.id}?s=Ganjil`}
         className="text-[10px] font-black text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all active:scale-95 uppercase tracking-wider"
@@ -105,7 +105,7 @@ export default function NilaiTable({ initialData }: { initialData: any[] }) {
 <td className="p-4">
   <div className="flex items-center justify-center gap-2">
     {!murid.id_genap ? (
-      // PERBAIKAN: Arahkan ke /guru/inputnilai/[murid_id]?s=Genap
+      // PERBAIKAN: Arahkan ke /wakilkurikulum/inputnilai/[murid_id]?s=Genap
       <Link 
         href={`/wakilkurikulum/inputnilai/${murid.id}?s=Genap`}
         className="text-[10px] font-black text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all active:scale-95 uppercase tracking-wider"

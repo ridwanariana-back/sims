@@ -1,240 +1,72 @@
-"use client";
+// app/guru/kehadiran/page.tsx
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
+import { sql } from "@vercel/postgres";
+import { Users } from "lucide-react";
+import { getMuridByWaliWithSchool } from "@/lib/actions";
+import ClientKehadiranManager from "@/components/ClientKehadiranManager";
 
-import { useState, useEffect } from "react";
-import { useSession } from "next-auth/react";
-import { getMuridByWali, getMissingDates, saveKehadiranBulk } from "@/lib/actions";
-import { 
-  Calendar as CalendarIcon, 
-  CheckCircle2, 
-  Save, 
-  Loader2, 
-  Users,
-  ChevronDown,
-  ChevronUp,
-  AlertTriangle,
-  History
-} from "lucide-react";
-import Link from "next/link";
+export default async function KehadiranPage() {
+  const session = await auth();
 
-interface AttendanceState {
-  [date: string]: {
-    [muridId: number]: string;
-  };
-}
-
-export default function KehadiranPage() {
-  const { data: session } = useSession();
-  const [murid, setMurid] = useState<any[]>([]);
-  const today = new Date().toISOString().split('T')[0];
-  
-  // State Filter
-  const [startDate, setStartDate] = useState(today);
-  const [endDate, setEndDate] = useState(today);
-  
-  // State Data
-  const [availableDates, setAvailableDates] = useState<string[]>([]);
-  const [openAccordion, setOpenAccordion] = useState<string | null>(null);
-  const [attendanceData, setAttendanceData] = useState<AttendanceState>({});
-  const [loading, setLoading] = useState(false);
-  const [isTooLong, setIsTooLong] = useState(false);
-
-  useEffect(() => {
-    if (session?.user?.kelasWali) {
-      getMuridByWali(session.user.kelasWali).then(setMurid);
-    }
-  }, [session]);
-
-  useEffect(() => {
-    if (murid.length > 0) {
-      const fetchDates = async () => {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        
-        const diffTime = Math.abs(end.getTime() - start.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        if (diffDays > 7) {
-          setIsTooLong(true);
-          setAvailableDates([]);
-          return;
-        }
-
-        setIsTooLong(false);
-        const dateArray: string[] = [];
-        for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 1)) {
-          dateArray.push(new Date(dt).toISOString().split('T')[0]);
-        }
-
-        const muridIds = murid.map(m => m.id);
-        const existingDates = await getMissingDates(muridIds, startDate, endDate);
-        const missing = dateArray.filter(d => !existingDates.includes(d));
-        
-        setAvailableDates(missing);
-        if (missing.length > 0) setOpenAccordion(missing[0]);
-      };
-
-      fetchDates();
-    }
-  }, [startDate, endDate, murid]);
-
-  const handleStatusChange = (date: string, muridId: number, status: string) => {
-    setAttendanceData((prev: AttendanceState) => ({
-      ...prev,
-      [date]: { ...(prev[date] || {}), [muridId]: status }
-    }));
-  };
-
-  const handleSave = async () => {
-  // Validasi data dan tahun ajaran
-  if (Object.keys(attendanceData).length === 0) return alert("Pilih minimal satu status kehadiran!");
-  if (!session?.user?.tahunAjaran) return alert("Sesi tahun ajaran tidak ditemukan. Silakan login ulang!");
-
-  setLoading(true);
-  const finalData: any[] = [];
-  
-  Object.keys(attendanceData).forEach(date => {
-    Object.keys(attendanceData[date]).forEach(mId => {
-      finalData.push({
-        murid_id: Number(mId),
-        // 1. UBAH DI SINI: Kirimkan NIP berupa String (Username), HAPUS fungsi Number()
-        guru_id: session?.user?.username?.toString(), 
-        tanggal: date,
-        status: attendanceData[date][Number(mId)],
-        tahun_ajaran: session?.user?.tahunAjaran 
-      });
-    });
-  });
-
-  const res = await saveKehadiranBulk(finalData);
-  if (res.success) {
-    alert("Presensi Berhasil Disimpan!");
-    window.location.reload(); 
-  } else {
-    alert("Gagal menyimpan presensi: " + res.error);
+  // 1. Validasi Akses Perwalian Guru
+  if (!session?.user || session.user.role?.toLowerCase() !== "guru") {
+    redirect("/");
   }
-  setLoading(false);
-};
+
+  if (!session.user.isWaliKelas || !session.user.kelasWali) {
+    redirect("/");
+  }
+
+  const rombelWaliAktif = session.user.kelasWali;
+  const tahunAjaranAktif = session.user.tahunAjaran || "-";
+
+  // 2. Ambil Multi-Tenant ID Sekolah & User ID
+  const sId = session.user.sekolah_id || (session.user as any).sekolahId;
+  const sekolahIdInt = sId ? parseInt(sId.toString(), 10) : null;
+  const userIdFromSession = session.user.id;
+
+  if (!sekolahIdInt || !userIdFromSession) {
+    redirect("/");
+  }
+
+  // 3. Ambil ID Guru Asli bertipe Integer (untuk kebutuhan foreign key fk_kehadiran_guru)
+  const guruRes = await sql`
+    SELECT g.id 
+    FROM users u
+    INNER JOIN guru g ON u.guru_id = g.id
+    WHERE u.id = ${userIdFromSession}
+  `;
+  const guruData = guruRes.rows[0];
+  if (!guruData) redirect("/");
+  const guruIdInt = guruData.id;
+
+  // 4. Ambil data murid ter-kunci dengan sekolah_id
+  const listMuridWali = await getMuridByWaliWithSchool(rombelWaliAktif, sekolahIdInt);
 
   return (
-    <div className="space-y-6 p-2">
-      {/* HEADER SECTION */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col lg:flex-row justify-between items-center gap-6">
-        <div className="flex items-center gap-6">
-          <div className="w-16 h-16 bg-slate-900 rounded-3xl flex items-center justify-center text-white shadow-xl">
-            <Users size={32} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">
-                Input Presensi {session?.user?.kelasWali || ""}
-            </h1>
-            <p className="text-slate-500 font-bold uppercase tracking-widest text-[9px] mt-2 italic">
-              Periode Aktif: {session?.user?.tahunAjaran || "-"} | Maksimal: 7 hari terakhir
-            </p>
-          </div>
+    <div className="space-y-6 p-2 text-left">
+      {/* HEADER UTAMA */}
+      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 flex items-center gap-6 shadow-sm">
+        <div className="w-16 h-16 bg-indigo-600 rounded-3xl flex items-center justify-center text-white shadow-xl shadow-indigo-100">
+          <Users size={32} />
         </div>
-
-        <div className="flex flex-wrap gap-4 items-end justify-center lg:justify-end w-full lg:w-auto">
-          <div className="space-y-1">
-            <span className="text-[9px] font-black text-slate-400 uppercase ml-1">Mulai</span>
-            <input type="date" value={startDate} max={today} onChange={(e) => setStartDate(e.target.value)} className="block p-3 bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl font-bold text-xs outline-none transition-all" />
-          </div>
-          <div className="space-y-1">
-            <span className="text-[9px] font-black text-slate-400 uppercase ml-1">Selesai</span>
-            <input type="date" value={endDate} max={today} onChange={(e) => setEndDate(e.target.value)} className="block p-3 bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl font-bold text-xs outline-none transition-all" />
-          </div>
-          <div className="flex gap-2">
-            <Link href="/guru/kehadiran/riwayat" className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-4 rounded-2xl font-black uppercase text-xs flex items-center gap-2 transition-all">
-                <History size={18} />
-                Riwayat
-            </Link>
-            <button onClick={handleSave} disabled={loading} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs flex items-center gap-2 shadow-lg shadow-indigo-100 transition-all disabled:opacity-50">
-                {loading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                Simpan
-            </button>
-          </div>
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">Presensi Kelas</h1>
+          <p className="text-slate-500 font-bold uppercase tracking-widest text-xs mt-2 italic">
+            Daftar Perwalian Rombel: <span className="text-indigo-600 font-black">{rombelWaliAktif}</span>
+          </p>
         </div>
       </div>
 
-      {/* RENDER AREA */}
-      <div className="space-y-4">
-        {isTooLong ? (
-          <div className="bg-amber-50 border-2 border-amber-200 rounded-[2.5rem] p-12 text-center">
-            <AlertTriangle size={48} className="mx-auto text-amber-500 mb-4" />
-            <h3 className="text-lg font-black text-amber-900 uppercase">Rentang Terlalu Lebar</h3>
-            <p className="text-amber-700 text-xs font-bold uppercase mt-1">Sistem hanya mengizinkan input maksimal 7 hari sekaligus agar data tetap akurat.</p>
-          </div>
-        ) : availableDates.length > 0 ? (
-          availableDates.map(date => (
-            <div key={date} className="bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm transition-all">
-              <button 
-                onClick={() => setOpenAccordion(openAccordion === date ? null : date)}
-                className="w-full bg-slate-900 px-8 py-5 flex justify-between items-center hover:bg-slate-800 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <CalendarIcon size={18} className="text-indigo-400" />
-                  <span className="text-white font-black uppercase tracking-[0.2em] text-xs">
-                    {new Date(date).toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-[9px] font-black text-indigo-300 uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full">
-                    {Object.keys(attendanceData[date] || {}).length} / {murid.length} Terpilih
-                  </span>
-                  {openAccordion === date ? <ChevronUp className="text-white" size={20}/> : <ChevronDown className="text-white" size={20}/>}
-                </div>
-              </button>
-
-              {openAccordion === date && (
-                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                        <tr className="border-b border-slate-100 bg-slate-50/50">
-                            <th className="px-8 py-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Data Siswa</th>
-                            <th className="px-8 py-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Status Kehadiran</th>
-                        </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                        {murid.map((m) => (
-                            <tr key={m.id} className="hover:bg-slate-50/30 transition-colors group">
-                            <td className="px-8 py-4">
-                                <p className="text-sm font-black text-slate-900 uppercase leading-none">{m.nama}</p>
-                                <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase italic tracking-tighter">NISN: {m.nisn} • {m.gender}</p>
-                            </td>
-                            <td className="px-8 py-4">
-                                <div className="flex justify-center gap-2">
-                                {['Hadir', 'Sakit', 'Izin', 'Alpha'].map((status) => (
-                                    <button
-                                    key={status}
-                                    onClick={() => handleStatusChange(date, m.id, status)}
-                                    className={`w-20 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all border-2 ${
-                                        attendanceData[date]?.[m.id] === status 
-                                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' 
-                                        : 'bg-white border-slate-100 text-slate-400 hover:border-slate-300'
-                                    }`}
-                                    >
-                                    {status}
-                                    </button>
-                                ))}
-                                </div>
-                            </td>
-                            </tr>
-                        ))}
-                        </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))
-        ) : (
-          <div className="bg-white border-2 border-dashed border-slate-200 rounded-[3rem] p-24 text-center">
-            <CheckCircle2 size={40} className="mx-auto text-emerald-400 mb-4" />
-            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Sudah Terisi Semua</h3>
-            <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-2">Tidak ada data kosong di rentang tanggal ini.</p>
-          </div>
-        )}
-      </div>
+      {/* Jembatan ke Interaksi UI Client Component */}
+      <ClientKehadiranManager 
+        initialMurid={listMuridWali}
+        sekolahId={sekolahIdInt}
+        guruId={guruIdInt}
+        tahunAjaran={tahunAjaranAktif}
+        kelasWali={rombelWaliAktif}
+      />
     </div>
   );
 }

@@ -4,10 +4,10 @@ import { redirect } from "next/navigation";
 import { 
   Users, 
   BookOpen, 
-  GraduationCap, 
   ClipboardCheck, 
   AlertCircle,
   ArrowUpRight,
+  School,
   UserCheck
 } from "lucide-react";
 import StatistikChart from "@/components/StatistikChart";
@@ -15,57 +15,117 @@ import Link from "next/link";
 
 export default async function DashboardGuru() {
   const session = await auth();
-  if (!session?.user || session.user.role !== "guru") {
+  if (!session?.user || session.user.role?.toLowerCase() !== "guru") {
     redirect("/");
   }
 
-  const guruId = session.user.id;
-  const nipGuru = session.user.username;
-  const kelasWali = session.user.kelasWali; // Data dari session wali kelas
+  const kelasWali = session.user.kelasWali; // Data rombel dari session wali kelas (misal: 'X.1')
 
-  // 1. Ambil Data Universal (Gunakan NIP untuk mencari ID Guru yang benar)
-const statsGuru = await sql`
-  SELECT 
-    (SELECT COUNT(DISTINCT rombel) FROM murid) as total_semua_kelas,
-    (
-      SELECT count(*) FROM nilai 
-      WHERE guru_id::text = ${nipGuru}::text -- <-- LANGSUNG KUNCI MENGGUNAKAN NIP GURU
-    ) as total_input_nilai,
-    (SELECT mapel FROM guru WHERE nip = ${nipGuru} LIMIT 1) as mapel
-`;
+  // 1. Ambil sekolah_id dari session login guru
+  const sId = session.user.sekolah_id || (session.user as any).sekolahId;
+  const sekolahIdInt = sId ? parseInt(sId.toString(), 10) : null;
+  const userIdFromSession = session.user.id;
 
-  // 2. Ambil Data Khusus Wali Kelas (Jika ada)
+  if (!sekolahIdInt || !userIdFromSession) {
+    return (
+      <div className="p-6 text-center text-rose-600 font-bold bg-white rounded-3xl border-2 border-rose-100 m-8">
+        Error: Autentikasi Gagal atau ID Sekolah tidak valid.
+      </div>
+    );
+  }
+
+  // == AMBIL DATA SEKOLAH ==
+  const profilSekolah = await sql`
+    SELECT nama_sekolah FROM sekolah WHERE id = ${sekolahIdInt}
+  `;
+  const namaSekolah = profilSekolah.rows[0]?.nama_sekolah || "Tidak Ada Nama Sekolah!";
+
+  // 2. 💡 AMBIL GURU_ID ASLI DARI TABEL GURU (BUKAN USER ID LOGINS)
+  const guruRes = await sql`
+    SELECT g.id, g.mapel 
+    FROM users u
+    INNER JOIN guru g ON u.guru_id = g.id
+    WHERE u.id = ${userIdFromSession}
+  `;
+  const guruData = guruRes.rows[0];
+
+  if (!guruData) {
+    return (
+      <div className="p-6 text-center text-rose-600 font-bold bg-white rounded-3xl border-2 border-rose-100 m-8">
+        Error: Profil Guru tidak ditemukan di sistem database.
+      </div>
+    );
+  }
+
+  const guruIdInt = guruData.id; // 💡 Ini ID Integer asli tabel guru untuk filter data!
+  const mapelGuruId = guruData.mapel || "";
+
+  // 💡 AMBIL NAMA MAPEL TEKS UNTUK DITAMPILKAN DI SUBTITLE GREETING
+  let namaMapelTxt = "Mata Pelajaran";
+  if (mapelGuruId) {
+    const mapelNameRes = await sql`SELECT nama_mapel FROM mapel WHERE id = ${parseInt(mapelGuruId.toString(), 10)}`;
+    if (mapelNameRes.rows.length > 0) {
+      namaMapelTxt = mapelNameRes.rows[0].nama_mapel;
+    }
+  }
+
+  // 3. Ambil Data Universal (Gunakan guruIdInt yang asli dari tabel guru)
+  const statsGuru = await sql`
+    SELECT 
+      (
+        SELECT COUNT(DISTINCT rombel) 
+        FROM murid 
+        WHERE sekolah_id = ${sekolahIdInt}
+      ) as total_semua_kelas,
+      (
+        SELECT count(*) 
+        FROM nilai 
+        WHERE guru_id = ${guruIdInt} -- 💡 Sudah pakai ID guru asli
+        AND sekolah_id = ${sekolahIdInt}
+        AND mapel = ${mapelGuruId}
+      ) as total_input_nilai
+  `;
+
+  // 4. Ambil Data Khusus Wali Kelas (Jika user terdeteksi sebagai wali kelas)
   let statsWali = null;
   let catatanTerbaru: any[] = [];
   
   if (kelasWali) {
-  const resWali = await sql`
-    SELECT 
-      -- Menghitung total murid di kelas perwalian
-      (SELECT COUNT(*) FROM murid WHERE rombel = ${kelasWali}) as total_murid_perwalian,
+    const resWali = await sql`
+      SELECT 
+        (
+          SELECT COUNT(*) 
+          FROM murid 
+          WHERE rombel = ${kelasWali} 
+          AND sekolah_id = ${sekolahIdInt}
+        ) as total_murid_perwalian,
 
-      -- Menghitung alpa hari ini dengan JOIN ke tabel murid untuk filter rombel
-      (SELECT COUNT(*) 
-       FROM kehadiran k
-       JOIN murid m ON k.murid_id = m.id
-       WHERE m.rombel = ${kelasWali} 
-       AND k.tanggal = CURRENT_DATE 
-       AND k.status = 'Alpa') as alpa_hari_ini,
+        (
+          SELECT COUNT(*) 
+          FROM kehadiran k
+          JOIN murid m ON k.murid_id = m.id
+          WHERE m.rombel = ${kelasWali} 
+          AND k.sekolah_id = ${sekolahIdInt}
+          AND k.tanggal = CURRENT_DATE 
+          AND k.status = 'Alpa'
+        ) as alpa_hari_ini,
 
-      -- Menghitung total kasus kedisiplinan murid di kelas tersebut
-      (SELECT COUNT(*) 
-       FROM catatan_kedisiplinan ck
-       JOIN murid m ON ck.murid_id = m.id
-       WHERE m.rombel = ${kelasWali}) as total_kasus
-  `;
-  statsWali = resWali.rows[0];
+        (
+          SELECT COUNT(*) 
+          FROM catatan_kedisiplinan ck
+          JOIN murid m ON ck.murid_id = m.id
+          WHERE m.rombel = ${kelasWali}
+          AND ck.sekolah_id = ${sekolahIdInt}
+        ) as total_kasus
+    `;
+    statsWali = resWali.rows[0];
 
-    // Ambil 5 catatan kedisiplinan terbaru untuk kelas ini
     const resCatatan = await sql`
       SELECT c.*, m.nama as nama_murid 
       FROM catatan_kedisiplinan c
       JOIN murid m ON c.murid_id = m.id
       WHERE m.rombel = ${kelasWali}
+      AND c.sekolah_id = ${sekolahIdInt}
       ORDER BY c.created_at DESC
       LIMIT 5
     `;
@@ -74,47 +134,61 @@ const statsGuru = await sql`
 
   const dataGuru = statsGuru.rows[0];
 
-// Ambil rata-rata nilai per rombel untuk grafik
-const grafikRes = await sql`
-  SELECT 
-    m.rombel, 
-    AVG(n.nilai_angka)::numeric(10,2) as rata 
-  FROM nilai n
-  JOIN murid m ON n.murid_id = m.id
-  WHERE n.guru_id::text = ${nipGuru}::text -- <-- LANGSUNG KUNCI MENGGUNAKAN NIP GURU
-  GROUP BY m.rombel
-  ORDER BY m.rombel ASC
-`;
+  // 5. Ambil rata-rata nilai per rombel (Gunakan guruIdInt asli dan mapelGuruId)
+  const grafikRes = await sql`
+    SELECT 
+      m.rombel, 
+      AVG(n.nilai_angka)::numeric(10,2) as rata 
+    FROM nilai n
+    JOIN murid m ON n.murid_id = m.id
+    WHERE n.guru_id = ${guruIdInt} -- 💡 Sudah pakai ID guru asli
+    AND n.sekolah_id = ${sekolahIdInt}
+    AND n.mapel = ${mapelGuruId}
+    GROUP BY m.rombel
+    ORDER BY m.rombel ASC
+  `;
 
-const dataGrafik = grafikRes.rows.map((row: any) => ({
-  rombel: row.rombel,
-  rata: parseFloat(row.rata) // Tambahkan Number() di sini Ridwan!
-}));
+  const dataGrafik = grafikRes.rows.map((row: any) => ({
+    rombel: row.rombel,
+    rata: parseFloat(row.rata)
+  }));
 
   return (
-    <div className="p-6 lg:p-10 space-y-8">
-      {/* GREETING SECTION */}
-      <div>
-        <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight">
-          Selamat Datang Kembali, {session.user.name}
-        </h1>
-        <p className="text-slate-500 font-medium italic mt-1">
-          {kelasWali ? `Wali Kelas ${kelasWali} • Guru Mata Pelajaran ${dataGuru.mapel}`  : `Guru Mata Pelajaran ${dataGuru.mapel}`} • Dashboard Monitoring
-        </p>
-      </div>
+    <div className="p-6 lg:p-10 space-y-8 text-left">
+      {/* GREETING SECTION & PENANDA SEKOLAH */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 md:p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight">
+            Selamat Datang Kembali, {session.user.name}
+          </h1>
+          <p className="text-slate-500 font-bold text-xs uppercase tracking-wide mt-1">
+            {/* 💡 Menggunakan namaMapelTxt yang bersih */}
+            {kelasWali ? `Wali Kelas ${kelasWali} • Guru ${namaMapelTxt}` : `Guru Mata Pelajaran ${namaMapelTxt}`} • Dashboard Monitoring
+          </p>
+        </div>
 
+        {/* PENANDA SEKOLAH AKTIF */}
+        <div className="bg-blue-600 px-5 py-3 rounded-2xl shadow-md text-white flex items-center gap-3 self-start md:self-auto shrink-0">
+          <School size={20} className="text-blue-200" />
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-widest text-blue-200">Sekolah Aktif</p>
+            <p className="text-sm font-bold uppercase tracking-wide">{namaSekolah}</p>
+          </div>
+        </div>
+      </div>
+      
       {/* STATS CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Universal Card 1 */}
+        {/* Card 1: Total Input Nilai */}
         <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-100 shadow-sm">
           <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-4">
             <BookOpen size={24} />
           </div>
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Input Nilai</p>
-          <h3 className="text-3xl font-black text-slate-900">{dataGuru.total_input_nilai}</h3>
+          <h3 className="text-3xl font-black text-slate-900">{dataGuru?.total_input_nilai || 0} </h3>
         </div>
 
-        {/* Conditional Cards for Wali Kelas */}
+        {/* Conditional Cards khusus Wali Kelas */}
         {kelasWali && (
           <>
             <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-100 shadow-sm">
@@ -122,7 +196,7 @@ const dataGrafik = grafikRes.rows.map((row: any) => ({
                 <Users size={24} />
               </div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Murid Kelas {kelasWali}</p>
-              <h3 className="text-3xl font-black text-slate-900">{statsWali?.total_murid_perwalian}</h3>
+              <h3 className="text-3xl font-black text-slate-900">{statsWali?.total_murid_perwalian || 0}</h3>
             </div>
 
             <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-100 shadow-sm border-b-rose-500 border-b-4">
@@ -130,7 +204,7 @@ const dataGrafik = grafikRes.rows.map((row: any) => ({
                 <UserCheck size={24} />
               </div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alpa Hari Ini</p>
-              <h3 className="text-3xl font-black text-rose-600">{statsWali?.alpa_hari_ini}</h3>
+              <h3 className="text-3xl font-black text-rose-600">{statsWali?.alpa_hari_ini || 0}</h3>
             </div>
 
             <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-100 shadow-sm border-b-amber-500 border-b-4">
@@ -138,7 +212,7 @@ const dataGrafik = grafikRes.rows.map((row: any) => ({
                 <AlertCircle size={24} />
               </div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kasus Kedisiplinan</p>
-              <h3 className="text-3xl font-black text-amber-600">{statsWali?.total_kasus}</h3>
+              <h3 className="text-3xl font-black text-amber-600">{statsWali?.total_kasus || 0}</h3>
             </div>
           </>
         )}
@@ -147,25 +221,25 @@ const dataGrafik = grafikRes.rows.map((row: any) => ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* MAIN CONTENT AREA */}
         <div className="lg:col-span-2 space-y-6">
-<div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 min-h-[400px]">
-  <div className="flex justify-between items-center mb-6">
-    <div>
-       <h4 className="font-black text-slate-900 uppercase text-sm tracking-tight">Rata-rata Nilai per Rombel</h4>
-       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Berdasarkan data input nilai terakhir</p>
-    </div>
-  </div>
-  
-  {/* Masukkan Komponen Grafik di Sini */}
-  <div className="h-[300px] min-h-[300px] w-full relative">
-  {dataGrafik.length > 0 ? (
-      <StatistikChart data={dataGrafik} />
-    ) : (
-      <div className="h-full flex items-center justify-center border-2 border-dashed border-slate-100 rounded-3xl">
-         <p className="text-[10px] font-black text-slate-300 uppercase italic">Belum ada data nilai</p>
-      </div>
-    )}
-    </div>
-</div>
+          <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 min-h-[400px]">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                 <h4 className="font-black text-slate-900 uppercase text-sm tracking-tight">Rata-rata Nilai per Rombel</h4>
+                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Berdasarkan data input nilai terakhir</p>
+              </div>
+            </div>
+            
+            {/* Area Grafik */}
+            <div className="h-[300px] min-h-[300px] w-full relative">
+              {dataGrafik.length > 0 ? (
+                <StatistikChart data={dataGrafik} />
+              ) : (
+                <div className="h-full flex items-center justify-center border-2 border-dashed border-slate-100 rounded-3xl">
+                   <p className="text-[10px] font-black text-slate-300 uppercase italic">Belum ada data nilai</p>
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Wali Kelas: Catatan Kedisiplinan Terbaru */}
           {kelasWali && (
@@ -181,7 +255,7 @@ const dataGrafik = grafikRes.rows.map((row: any) => ({
                   <div key={catatan.id} className="p-4 hover:bg-slate-50 rounded-2xl transition-all flex items-center justify-between group">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center font-black text-slate-400 group-hover:bg-rose-100 group-hover:text-rose-600 transition-all">
-                        {catatan.nama_murid.charAt(0)}
+                        {catatan.nama_murid ? catatan.nama_murid.charAt(0) : '?'}
                       </div>
                       <div>
                         <p className="text-xs font-black text-slate-900 uppercase">{catatan.nama_murid}</p>

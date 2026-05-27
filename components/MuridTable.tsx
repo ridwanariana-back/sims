@@ -1,28 +1,27 @@
+// components/MuridTable.tsx
 "use client";
 
 import { useState } from "react";
 import { 
   Search, Trash2, Edit, ChevronLeft, ChevronRight, 
-  X, Save, Calendar, Fingerprint, BadgeCheck, User2, Heart 
+  X, Save, Calendar, Fingerprint, BadgeCheck, User2 
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-const DAFTAR_KELAS = ["X", "XI", "XII"];
-const ROMBEL_PER_KELAS: Record<string, string[]> = {
-  "X": ["X.1", "X.2", "X.3", "X.4"],
-  "XI": ["XI.F1", "XI.F2", "XI.F3", "XI.F4"],
-  "XII": ["XII.F1", "XII.F2", "XII.F3", "XII.F4"]
-};
+interface MuridTableProps {
+  initialData: any[];
+  masterKelas: any[]; // 🚩 Tambahkan data kelas dari database
+}
 
-export default function MuridTable({ initialData }: { initialData: any[] }) {
+export default function MuridTable({ initialData, masterKelas }: MuridTableProps) {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   
-  const [editingMurid, setEditingMurid] = useState<any>(null); // State untuk Modal Edit
+  const [editingMurid, setEditingMurid] = useState<any>(null); 
   const [loading, setLoading] = useState(false);
-  const [tempKelas, setTempKelas] = useState<string>("");
+  const [tempTingkat, setTempTingkat] = useState<string>("");
 
   const filteredMurid = initialData.filter((m) =>
     m.nama.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -32,7 +31,11 @@ export default function MuridTable({ initialData }: { initialData: any[] }) {
   const totalPages = Math.ceil(filteredMurid.length / rowsPerPage);
   const currentItems = filteredMurid.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
-  // --- FUNGSI HAPUS ---
+  // Ambil daftar tingkat unik dari database
+  const daftarTingkatUnik = Array.from(new Set(masterKelas.map((k) => k.tingkat.toString()))).sort((a, b) => Number(a) - Number(b));
+  // Filter rombel berdasarkan tingkat edit terpilih
+  const rombelTersediaEdit = masterKelas.filter((k) => k.tingkat.toString() === tempTingkat);
+
   const handleDelete = async (id: number) => {
     if (confirm("Apakah Anda yakin ingin menghapus data murid ini secara permanen?")) {
       setLoading(true);
@@ -48,10 +51,9 @@ export default function MuridTable({ initialData }: { initialData: any[] }) {
 
   const handleEditClick = (murid: any) => {
     setEditingMurid(murid);
-    setTempKelas(murid.kelas); // Set kelas awal sesuai data murid
+    setTempTingkat(murid.kelas.toString()); 
   };
 
-  // --- FUNGSI SIMPAN EDIT ---
   const handleEditSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -75,13 +77,13 @@ export default function MuridTable({ initialData }: { initialData: any[] }) {
 
   return (
     <div className="space-y-6">
-      {/* Search & Rows Per Page (Sesuai Gambar) */}
+      {/* Search & Rows Per Page */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-3">
           <select 
             value={rowsPerPage} 
             onChange={(e) => {setRowsPerPage(Number(e.target.value)); setCurrentPage(1)}} 
-            className="border-2 rounded-xl p-2 text-sm font-black text-slate-900 outline-none"
+            className="border-2 rounded-xl p-2 text-sm font-black text-slate-900 outline-none bg-white"
           >
             {[10, 20, 50].map((num) => <option key={num} value={num}>Show {num}</option>)}
           </select>
@@ -101,7 +103,7 @@ export default function MuridTable({ initialData }: { initialData: any[] }) {
         </div>
       </div>
 
-      {/* Tabel */}
+      {/* Tabel Utama */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
@@ -143,26 +145,42 @@ export default function MuridTable({ initialData }: { initialData: any[] }) {
                   </td>
                   <td className="px-6 py-6 text-center align-top">
                     <div className="inline-flex flex-col items-center">
-                       <div className="text-[9px] font-black text-slate-900 bg-blue-100 px-2 rounded mb-1 uppercase">Kelas {murid.kelas}</div>
+                       <div className="text-[9px] font-black text-slate-900 bg-blue-100 px-2 rounded mb-1 uppercase">Tingkat {murid.kelas}</div>
                        <div className="bg-slate-900 text-white px-4 py-1.5 rounded-xl text-xs font-black border-2 border-slate-800 uppercase">{murid.rombel}</div>
                     </div>
                   </td>
                   <td className="px-6 py-6 text-center align-top">
-                    <div className="flex justify-center gap-2">
-                      <button 
-  onClick={() => handleEditClick(murid)}
-  className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-100 transition-all"
->
-  <Edit size={16} />
-</button>
-                      <button 
-                        onClick={() => handleDelete(murid.id)}
-                        className="p-2.5 bg-white border-2 border-slate-100 text-red-600 hover:border-red-600 rounded-xl transition-all"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </td>
+  <div className="flex justify-center gap-2">
+    
+    {/* 🎓 KONDISI 1: JIKA MURID SUDAH LULUS / ALUMNI */}
+    {murid.status === 'lulus' ? (
+      <span className="inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-sm whitespace-nowrap">
+        🎓 Telah Lulus (Alumni)
+      </span>
+    ) : (
+      
+      /* ⚡ KONDISI 2: JIKA MURID MASIH AKTIF (KODE BAWAAN) */
+      <>
+        <button 
+          onClick={() => handleEditClick(murid)} 
+          className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-100 transition-all"
+          title="Edit Data Murid"
+        >
+          <Edit size={16} />
+        </button>
+        
+        <button 
+          onClick={() => handleDelete(murid.id)} 
+          className="p-2.5 bg-white border-2 border-slate-100 text-red-600 hover:border-red-600 rounded-xl transition-all"
+          title="Hapus Data Murid"
+        >
+          <Trash2 size={18} />
+        </button>
+      </>
+    )}
+
+  </div>
+</td>
                 </tr>
               ))}
             </tbody>
@@ -170,7 +188,7 @@ export default function MuridTable({ initialData }: { initialData: any[] }) {
         </div>
       </div>
 
-      {/* --- MODAL EDIT (Muncul saat tombol pensil diklik) --- */}
+      {/* MODAL EDIT DATA MURID */}
       {editingMurid && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 text-left">
           <div className="bg-white rounded-3xl p-8 w-full max-w-2xl shadow-2xl relative max-h-[90vh] overflow-y-auto border-4 border-white">
@@ -202,49 +220,40 @@ export default function MuridTable({ initialData }: { initialData: any[] }) {
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-500 uppercase">Tgl Lahir</label>
-                <input 
-                name="tanggal_lahir" 
-                type="date" 
-                defaultValue={
-                  editingMurid.tanggal_lahir 
-                    ? new Date(editingMurid.tanggal_lahir).toISOString().split('T')[0] 
-                    : ""
-                } 
-                required 
-                className="w-full border-2 p-3.5 rounded-xl font-black outline-none focus:border-amber-600 transition-all" 
-              />
+                <input name="tanggal_lahir" type="date" defaultValue={editingMurid.tanggal_lahir ? new Date(editingMurid.tanggal_lahir).toISOString().split('T')[0] : ""} required className="w-full border-2 p-3.5 rounded-xl font-black outline-none focus:border-amber-600 transition-all" />
               </div>
               <div className="md:col-span-2 space-y-1">
                 <label className="text-[10px] font-black text-slate-500 uppercase">Nama Ibu</label>
                 <input name="nama_ibu" defaultValue={editingMurid.nama_ibu} required className="w-full border-2 p-3.5 rounded-xl font-black uppercase bg-slate-50" />
               </div>
-              {/* Cari bagian select Kelas di dalam Modal Edit */}
-<div className="space-y-1">
-  <label className="text-[10px] font-black text-slate-500 uppercase">Kelas</label>
-  <select 
-    name="kelas" 
-    value={tempKelas} // Gunakan state tempKelas
-    onChange={(e) => setTempKelas(e.target.value)} // Update saat diganti
-    className="w-full border-2 p-3.5 rounded-xl font-black bg-white outline-none focus:border-amber-500"
-  >
-    {DAFTAR_KELAS.map(k => <option key={k} value={k}>{k}</option>)}
-  </select>
-</div>
 
-{/* Cari bagian select Rombel di dalam Modal Edit */}
-<div className="space-y-1">
-  <label className="text-[10px] font-black text-slate-500 uppercase">Rombel</label>
-  <select 
-    name="rombel" 
-    defaultValue={editingMurid.rombel} 
-    className="w-full border-2 p-3.5 rounded-xl font-black bg-white outline-none focus:border-amber-500"
-  >
-    {/* Tampilkan rombel hanya yang sesuai dengan kelas yang dipilih (tempKelas) */}
-    {ROMBEL_PER_KELAS[tempKelas]?.map(r => (
-      <option key={r} value={r}>{r}</option>
-    ))}
-  </select>
-</div>
+              {/* SELECT KELAS DINAMIS (EDIT) */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase">Tingkat</label>
+                <select 
+                  name="kelas" 
+                  value={tempTingkat} 
+                  onChange={(e) => setTempTingkat(e.target.value)} 
+                  className="w-full border-2 p-3.5 rounded-xl font-black bg-white outline-none focus:border-amber-500"
+                >
+                  {daftarTingkatUnik.map(t => <option key={t} value={t}>Tingkat {t}</option>)}
+                </select>
+              </div>
+
+              {/* SELECT ROMBEL DINAMIS (EDIT) */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase">Rombel</label>
+                <select 
+                  name="rombel" 
+                  defaultValue={editingMurid.rombel} 
+                  className="w-full border-2 p-3.5 rounded-xl font-black bg-white outline-none focus:border-amber-500"
+                >
+                  {rombelTersediaEdit.map((r, idx) => (
+                    <option key={idx} value={r.nama_kelas}>{r.nama_kelas}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="flex gap-4 pt-6 md:col-span-2">
                 <button type="button" onClick={() => setEditingMurid(null)} className="flex-1 bg-slate-100 py-4 rounded-2xl font-black text-slate-600 uppercase text-xs">Batal</button>
                 <button type="submit" disabled={loading} className="flex-[2] bg-amber-600 text-white py-4 rounded-2xl font-black hover:bg-amber-700 flex items-center justify-center gap-2 uppercase text-xs">

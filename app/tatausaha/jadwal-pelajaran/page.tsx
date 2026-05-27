@@ -2,42 +2,41 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Save, Calendar, Clock, BookOpen, Users, Loader2, Plus, Trash2, History, Eye, UserCheck } from "lucide-react";
-import { saveJadwalPelajaran, getTahunAjaranDinamis, getDaftarGuru } from "@/lib/actions";
+import { useSession } from "next-auth/react";
+import { Save, Calendar, Loader2, Plus, Trash2, Eye } from "lucide-react";
+import { 
+  saveJadwalPelajaran, 
+  getTahunAjaranDinamis, 
+  getDaftarGuru, 
+  getDaftarKelas, 
+  getDaftarMapel 
+} from "@/lib/actions";
 
-const DAFTAR_HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat"];
-const DAFTAR_MAPEL = [
-  "PAI & BudiPekerti", "PKN", "Bahasa Indonesia", "Bahasa Inggris", 
-  "Bahasa Inggris Tingkat Lanjut", "Matematika Wajib", "Matematika Tingkat Lanjut", 
-  "Fisika", "Fisika Mapel Pilihan", "Biologi", "Biologi Mapel Pilihan", 
-  "Kimia", "Kimia Mapel Pilihan", "Sejarah", "Sejarah Tingkat Lanjut", 
-  "Geografi", "Geografi Mapel Pilihan", "Ekonomi", "Ekonomi Mapel Pilihan", 
-  "Sosiologi", "Sosiologi Mapel Pilihan", "Seni Budaya", "Penjas Orkes", 
-  "PKWU", "Informatika", "Bimbingan Konseling"
-];
-
-const KEGIATAN_SEKOLAH = [
-  "Upacara Bendera", "Istirahat", "Isoma", "SMANSA Student Performance", 
-  "Membaca Al Qur'an", "Senam", "Imtaq"
-];
-
-const DAFTAR_KELAS = ["X", "XI", "XII"];
-const ROMBEL_PER_KELAS: Record<string, string[]> = {
-  "X": ["X.1", "X.2", "X.3", "X.4"],
-  "XI": ["XI.F1", "XI.F2", "XI.F3", "XI.F4"],
-  "XII": ["XII.F1", "XII.F2", "XII.F3", "XII.F4"],
-};
+const DAFTAR_HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
 export default function BuatJadwalPage() {
+  const { data: session } = useSession();
+  
+  const sId = session?.user?.sekolah_id || (session?.user as any)?.sekolahId;
+  const sekolahIdInt = sId ? parseInt(sId.toString()) : null;
+
   const [forms, setForms] = useState<any[]>([]);
   const [allGurus, setAllGurus] = useState<any[]>([]);
+  const [allKelas, setAllKelas] = useState<any[]>([]);
+  const [allMapel, setAllMapel] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [tahunAjaran, setTahunAjaran] = useState("");
 
   useEffect(() => {
+    if (!sekolahIdInt) return;
+
     getTahunAjaranDinamis().then(setTahunAjaran);
-    getDaftarGuru().then(setAllGurus);
-  }, []);
+    getDaftarGuru(sekolahIdInt).then(setAllGurus);
+    getDaftarKelas(sekolahIdInt).then(setAllKelas);
+    getDaftarMapel(sekolahIdInt).then(setAllMapel);
+  }, [sekolahIdInt]);
+
+  const daftarTingkatUnik = Array.from(new Set(allKelas.map(k => k.tingkat.toString()))).sort();
 
   const tambahForm = () => {
     setForms([{ 
@@ -56,10 +55,21 @@ export default function BuatJadwalPage() {
       if (f.id === id) {
         const updatedForm = { ...f, [field]: value };
         
-        // Logika Auto-Fill Guru jika yang diubah adalah mapel
+        if (field === "kelas") {
+          updatedForm.rombel = ""; 
+        }
+
         if (field === "mapel") {
-          const guruCocok = allGurus.find(g => g.mapel === value);
-          updatedForm.guru_id = guruCocok ? guruCocok.id.toString() : "";
+          // 💡 SINKRONISASI ID: Cari mapel berdasarkan ID mapel yang dipilih
+          const selectedMapelObj = allMapel.find(m => m.id.toString() === value.toString());
+          
+          if (selectedMapelObj?.kelompok === "Kegiatan") {
+            updatedForm.guru_id = "";
+          } else {
+            // 💡 SINKRONISASI ID: Cari guru yang string mapel-nya cocok dengan ID mapel ini
+            const guruCocok = allGurus.find(g => g.mapel?.toString() === value.toString());
+            updatedForm.guru_id = guruCocok ? guruCocok.id.toString() : "";
+          }
         }
         
         return updatedForm;
@@ -68,63 +78,74 @@ export default function BuatJadwalPage() {
     }));
   };
 
-const handleSaveAll = async () => {
-  if (forms.length === 0) return alert("Tambah jadwal terlebih dahulu");
-  
-  setLoading(true);
-  
-  // BALIK URUTAN: .reverse() membuat baris yang paling bawah (yang dibuat duluan) 
-  // diproses pertama kali oleh sistem
-  const formsToProcess = [...forms].reverse(); 
-  
-  const formsBerhasil: number[] = [];
-  let errorMsg = "";
-
-  for (const form of formsToProcess) {
-    const dataToSave = { ...form, tahun_ajaran: tahunAjaran };
-    const res = await saveJadwalPelajaran([dataToSave]); 
-
-    if (res.success) {
-      formsBerhasil.push(form.id);
-    } else {
-      errorMsg = res.error; 
-      break; 
+  const handleSaveAll = async () => {
+    if (!sekolahIdInt) return alert("Sesi sekolah tidak valid. Silakan login ulang.");
+    if (forms.length === 0) return alert("Tambah jadwal terlebih dahulu");
+    
+    for (const f of forms) {
+      if (!f.hari || !f.mapel || !f.kelas || !f.rombel || !f.jam_mulai || !f.jam_selesai) {
+        return alert("Mohon lengkapi semua kolom input jadwal yang kosong!");
+      }
     }
-  }
 
-  if (formsBerhasil.length > 0) {
-    setForms(prev => prev.filter(f => !formsBerhasil.includes(f.id)));
-  }
+    setLoading(true);
+    const formsToProcess = [...forms].reverse(); 
+    const formsBerhasil: number[] = [];
+    let errorMsg = "";
 
-  if (errorMsg) {
-    alert(errorMsg); 
-  } else {
-    alert("Semua jadwal berhasil disimpan!");
-  }
+    for (const form of formsToProcess) {
+      const dataToSave = { ...form, tahun_ajaran: tahunAjaran };
+      const res = await saveJadwalPelajaran([dataToSave], sekolahIdInt); 
 
-  setLoading(false);
-};
+      if (res.success) {
+        formsBerhasil.push(form.id);
+      } else {
+        errorMsg = res.error; 
+        break; 
+      }
+    }
+
+    if (formsBerhasil.length > 0) {
+      setForms(prev => prev.filter(f => !formsBerhasil.includes(f.id)));
+    }
+
+    if (errorMsg) {
+      alert(errorMsg); 
+    } else {
+      alert("Semua jadwal berhasil disimpan!");
+    }
+
+    setLoading(false);
+  };
 
   return (
     <div className="p-4 md:p-8 space-y-10 bg-slate-50 min-h-screen pb-32">
-      <div className="flex flex-col md:flex-row justify-between sticky top-0 z-50 items-center gap-4">
+      {/* STICKY TOP HEADER */}
+      <div className="flex flex-col md:flex-row justify-between sticky top-0 z-50 items-center gap-4 bg-slate-50/80 backdrop-blur-md py-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Buat Jadwal Pelajaran</h1>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Tahun Ajaran: {tahunAjaran}</p>
         </div>
         <div className="flex gap-3">
-            <Link href="/tatausaha/jadwal-pelajaran/view" className="p-4 bg-white border-2 border-slate-200 rounded-2xl hover:bg-slate-50 transition-all">
-                <Eye size={20} className="text-slate-600" />
-            </Link>
-            <button onClick={tambahForm} className="flex items-center gap-3 px-6 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100">
-                <Plus size={18} /> Tambah Baris
-            </button>
+          <Link href="/tatausaha/jadwal-pelajaran/view" className="p-4 bg-white border-2 border-slate-200 rounded-2xl hover:bg-slate-50 transition-all">
+            <Eye size={20} className="text-slate-600" />
+          </Link>
+          <button onClick={tambahForm} className="flex items-center gap-3 px-6 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100">
+            <Plus size={18} /> Tambah Baris
+          </button>
         </div>
       </div>
 
+      {/* INPUT FORM GRID */}
       <div className="space-y-6">
-        {forms.map((form, index) => {
-          const filteredGurus = allGurus.filter(g => g.mapel === form.mapel);
+        {forms.map((form) => {
+          const rombelTersedia = allKelas.filter(k => k.tingkat.toString() === form.kelas);
+          
+          // 💡 SINKRONISASI ID: Filter guru pengampu berdasarkan ID Mapel yang dipilih
+          const filteredGurus = allGurus.filter(g => g.mapel?.toString() === form.mapel?.toString());
+          
+          // 💡 SINKRONISASI ID: Cek kategori mapel berdasarkan ID
+          const isKegiatan = allMapel.find(m => m.id.toString() === form.mapel?.toString())?.kelompok === "Kegiatan";
 
           return (
             <div key={form.id} className="bg-white p-6 md:p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-sm relative animate-in fade-in slide-in-from-top-4 duration-300">
@@ -142,12 +163,12 @@ const handleSaveAll = async () => {
                   </select>
                 </div>
 
-                {/* KELAS */}
+                {/* TINGKAT KELAS */}
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Tingkat Kelas</label>
                   <select value={form.kelas} onChange={(e) => updateForm(form.id, "kelas", e.target.value)} className="w-full p-3.5 bg-slate-100 border-2 border-transparent focus:border-slate-900 rounded-xl font-bold text-xs outline-none transition-all">
-                    <option value="">Pilih Kelas</option>
-                    {DAFTAR_KELAS.map(k => <option key={k} value={k}>Kelas {k}</option>)}
+                    <option value="">Pilih Tingkat</option>
+                    {daftarTingkatUnik.map(t => <option key={t} value={t}>Kelas {t}</option>)}
                   </select>
                 </div>
 
@@ -156,33 +177,48 @@ const handleSaveAll = async () => {
                   <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Rombongan Belajar</label>
                   <select value={form.rombel} onChange={(e) => updateForm(form.id, "rombel", e.target.value)} disabled={!form.kelas} className="w-full p-3.5 bg-slate-100 border-2 border-transparent focus:border-slate-900 rounded-xl font-bold text-xs outline-none transition-all disabled:opacity-50">
                     <option value="">Pilih Rombel</option>
-                    {form.kelas && ROMBEL_PER_KELAS[form.kelas].map(r => <option key={r} value={r}>{r}</option>)}
+                    {rombelTersedia.map(r => <option key={r.id} value={r.nama_kelas}>{r.nama_kelas}</option>)}
                   </select>
                 </div>
 
-                {/* MATA PELAJARAN */}
+                {/* MATA PELAJARAN / KEGIATAN (Ubah VALUE menjadi ID) */}
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Mata Pelajaran</label>
                   <select value={form.mapel} onChange={(e) => updateForm(form.id, "mapel", e.target.value)} className="w-full p-3.5 bg-slate-100 border-2 border-transparent focus:border-slate-900 rounded-xl font-bold text-xs outline-none transition-all">
                     <option value="">Pilih Mapel / Kegiatan</option>
                     <optgroup label="MATA PELAJARAN">
-                      {DAFTAR_MAPEL.map(m => <option key={m} value={m}>{m}</option>)}
+                      {allMapel.filter(m => m.kelompok !== 'Kegiatan').map(m => (
+                        <option key={m.id} value={m.id}>{m.nama_mapel} ({m.kelompok})</option>
+                      ))}
                     </optgroup>
                     <optgroup label="KEGIATAN SEKOLAH">
-                      {KEGIATAN_SEKOLAH.map(k => <option key={k} value={k}>{k}</option>)}
+                      {allMapel.filter(m => m.kelompok === 'Kegiatan').map(m => (
+                        <option key={m.id} value={m.id}>{m.nama_mapel}</option>
+                      ))}
                     </optgroup>
                   </select>
                 </div>
 
                 {/* GURU PENGAMPU */}
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-indigo-600 uppercase ml-2">Guru Pengampu</label>
-                  <select value={form.guru_id} onChange={(e) => updateForm(form.id, "guru_id", e.target.value)} className="w-full p-3.5 bg-indigo-50 border-2 border-transparent focus:border-indigo-600 rounded-xl font-bold text-xs outline-none transition-all">
-                    <option value="">-- Tidak Ada Guru / Kegiatan --</option>
-                    {filteredGurus.length > 0 && (
-                      <optgroup label="GURU MAPEL INI">
-                        {filteredGurus.map(g => <option key={g.id} value={g.id}>{g.nama} (NIP: {g.nip})</option>)}
-                      </optgroup>
+                  <label className={`text-[9px] font-black uppercase ml-2 ${isKegiatan ? 'text-slate-400' : 'text-indigo-600'}`}>
+                    Guru Pengampu
+                  </label>
+                  <select 
+                    value={form.guru_id} 
+                    onChange={(e) => updateForm(form.id, "guru_id", e.target.value)} 
+                    disabled={isKegiatan}
+                    className="w-full p-3.5 bg-indigo-50 border-2 border-transparent focus:border-indigo-600 rounded-xl font-bold text-xs outline-none transition-all disabled:opacity-40 disabled:bg-slate-100"
+                  >
+                    {isKegiatan ? (
+                      <option value="">-- Agenda Kegiatan (Tanpa Guru) --</option>
+                    ) : (
+                      <>
+                        <option value="">-- Tidak Ada Guru --</option>
+                        {filteredGurus.map(g => (
+                          <option key={g.id} value={g.id}>{g.nama} (NIP: {g.nip || "-"})</option>
+                        ))}
+                      </>
                     )}
                   </select>
                 </div>
@@ -204,6 +240,7 @@ const handleSaveAll = async () => {
         })}
       </div>
 
+      {/* FLOAT SAVE BUTTON */}
       {forms.length > 0 && (
         <div className="fixed bottom-8 right-8 left-8 md:left-auto md:w-80">
           <button onClick={handleSaveAll} disabled={loading} className="w-full bg-slate-900 hover:bg-black text-white p-5 rounded-3xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3 shadow-2xl transition-all active:scale-95 disabled:opacity-50">
@@ -213,6 +250,7 @@ const handleSaveAll = async () => {
         </div>
       )}
 
+      {/* EMPTY STATE */}
       {forms.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-slate-300">
           <Calendar size={64} strokeWidth={1} />

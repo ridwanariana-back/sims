@@ -1,9 +1,10 @@
+// app/page.tsx
 'use client';
 
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation'; // Pastikan import dari next/navigation
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation'; 
+import { Eye, EyeOff, Loader2, School } from 'lucide-react';
 import { authenticate } from '@/lib/actions';
 
 export default function LoginPage() {
@@ -17,24 +18,16 @@ export default function LoginPage() {
     setErrorMessage(null);
     
     try {
-      // Memanggil Server Action authenticate
       const result = await authenticate(formData);
       
-      // Jika authenticate mengembalikan string (pesan error)
       if (typeof result === 'string') {
         setErrorMessage(result);
-        setIsLoading(false); // Matikan loading hanya jika ada error
+        setIsLoading(false); 
       } else {
-        // 1. Paksa browser membuang cache lama (Hapus status 'Guest')
         router.refresh(); 
-        
-        // 2. Arahkan ke halaman tujuan
-        // Gunakan '/operator' atau biarkan middleware yang bekerja
         window.location.href = '/';
       }
     } catch (error: any) {
-      
-      
       setErrorMessage("Terjadi kesalahan sistem. Silakan coba lagi.");
       setIsLoading(false);
     }
@@ -43,24 +36,20 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-8">
       <div className="w-full max-w-md space-y-6 rounded-xl bg-white p-8 shadow-xl">
-        <div className="text-center space-y-4">
-          <h3 className="text-2xl font-bold tracking-tight text-gray-900 md:text-3xl">
-            SIMS Pemulutan Selatan
-          </h3>
-          <div className="flex justify-center">
-            <div className="relative h-32 w-32"> 
-              <Image 
-                src="/hero.jpg" 
-                alt="Logo Sekolah"
-                fill
-                priority
-                className="object-contain"
-              />
-            </div>
-          </div>
-        </div>
+        <div className="text-center space-y-4 pt-4">
+                  <h3 className="text-2xl font-bold tracking-tight text-gray-900 md:text-3xl">
+                    Selamat Datang Di SIMS
+                  </h3>
+                  <div className="flex justify-center">
+                    <div className="relative h-24 w-24 flex items-center justify-center bg-blue-50 text-blue-600 rounded-full border border-blue-100 shadow-sm"> 
+                      <School size={44} />
+                    </div>
+                  </div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    Sistem Informasi Manajemen Sekolah
+                  </p>
+                </div>
         
-        {/* Menggunakan onSubmit agar state isLoading lebih terkontrol */}
         <form 
           onSubmit={(e) => {
             e.preventDefault();
@@ -121,6 +110,19 @@ export default function LoginPage() {
               "Sign In"
             )}
           </button>
+
+          {/* TAMBAHAN BUTTON LINK REGISTER SEKOLAH BARU DI SINI 🚩 */}
+          <div className="pt-4 border-t border-gray-100 text-center">
+            <button
+              type="button"
+              onClick={() => router.push('/register-sekolah')}
+              disabled={isLoading}
+              className="inline-flex items-center gap-2 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider"
+            >
+              <School size={14} />
+              <span>Daftarkan Sekolah Baru Anda</span>
+            </button>
+          </div>
         </form>
       </div>
     </main>

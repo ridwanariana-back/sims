@@ -1,9 +1,6 @@
-// app/wakilkesiswaan/inputnilai/[id]/page.tsx
-
 import { auth } from "@/auth";
 import { sql } from "@vercel/postgres";
-import { notFound } from "next/navigation";
-import { redirect as nextRedirect } from "next/navigation";
+import { notFound, redirect as nextRedirect } from "next/navigation";
 import FormInputNilai from "@/components/FormInputNilaiWKS";
 import { getTahunAjaranDinamis } from "@/lib/actions";
 
@@ -16,8 +13,7 @@ export default async function HalamanFormNilai({
 }) {
   const session = await auth();
   
-  // Proteksi Route: Hanya Guru yang bisa akses
-  if (!session?.user || session.user.role !== "wakilkesiswaan") {
+  if (!session?.user || session.user.role?.toLowerCase() !== "wakilkesiswaan") {
     nextRedirect("/");
   }
 
@@ -25,51 +21,76 @@ export default async function HalamanFormNilai({
   const { s } = await searchParams;
   const semesterPilihan = s || "Ganjil";
 
-  // Pastikan ID yang masuk adalah angka valid sebelum query ke DB
   if (isNaN(Number(id))) {
     nextRedirect("/wakilkesiswaan/inputnilai");
   }
 
-  // 1. Ambil Data Murid berdasarkan ID Murid dari URL params
+  const sId = session.user.sekolah_id || (session.user as any).sekolahId;
+  const sekolahIdInt = sId ? parseInt(sId.toString(), 10) : null;
+  const userIdFromSession = session.user.id; 
+
+  if (!sekolahIdInt || !userIdFromSession) {
+    nextRedirect("/wakilkesiswaan/inputnilai");
+  }
+
+  const guruRes = await sql`
+    SELECT g.id, g.mapel 
+    FROM users u
+    INNER JOIN guru g ON u.guru_id = g.id
+    WHERE u.id = ${userIdFromSession}
+  `;
+  const guruData = guruRes.rows[0];
+
+  if (!guruData) {
+    nextRedirect("/wakilkesiswaan/inputnilai");
+  }
+
+  const guruIdInt = guruData.id; 
+  const mapelGuru = guruData.mapel || ""; // 💡 Ini berisi ID Mapel (misal: "12")
+
+  // 💡 AMBIL NAMA MAPEL ASLI DARI TABEL MAPEL BERDASARKAN ID
+  let namaMapelTxt = "Mata Pelajaran";
+  if (mapelGuru) {
+    const mapelNameRes = await sql`SELECT nama_mapel FROM mapel WHERE id = ${parseInt(mapelGuru.toString(), 10)}`;
+    if (mapelNameRes.rows.length > 0) {
+      namaMapelTxt = mapelNameRes.rows[0].nama_mapel;
+    }
+  }
+
   const muridRes = await sql`
     SELECT id, nama, nisn, kelas, rombel, status 
     FROM murid 
-    WHERE id = ${Number(id)}
+    WHERE id = ${Number(id)} AND sekolah_id = ${sekolahIdInt}
   `;
   const murid = muridRes.rows[0];
 
   if (!murid) notFound();
-  const nipGuru = session.user.username;
 
-  // 2. Ambil Mapel Guru yang sedang login berdasarkan NIP
-  const guruRes = await sql`SELECT mapel FROM guru WHERE nip = ${nipGuru}`;
-  const guruData = guruRes.rows[0];
-  const mapelGuru = guruData?.mapel || "";
-
-  // 3. Ambil data nilai lama jika sudah pernah diinput sebelumnya
   const nilaiRes = await sql`
     SELECT * FROM nilai 
     WHERE murid_id = ${Number(id)} 
-    AND guru_id = ${nipGuru} 
-    AND mapel = ${mapelGuru} 
-    AND semester = ${semesterPilihan}
+      AND guru_id = ${guruIdInt} 
+      AND mapel = ${mapelGuru} 
+      AND semester = ${semesterPilihan}
+      AND sekolah_id = ${sekolahIdInt}
   `;
-  const dataLama = nilaiRes.rows[0]; // Jika tidak ada, otomatis undefined (Mode Tambah Nilai)
+  const dataLama = nilaiRes.rows[0]; 
   const tahunSekarang = await getTahunAjaranDinamis();
 
-  // Cegah input nilai jika murid sudah dinyatakan Lulus atau Naik Kelas
   if (murid.status === "Lulus" || murid.status === "Naik Kelas") {
     nextRedirect("/wakilkesiswaan/inputnilai");
   }
 
   return (
-    <div className="p-6 lg:p-10 max-w-5xl mx-auto space-y-8">
+    <div className="p-6 lg:p-10 max-w-5xl mx-auto space-y-8 text-left">
       <FormInputNilai 
         muridId={murid.id} 
-        guruId={nipGuru} 
-        mapelDefault={mapelGuru}
+        guruId={guruIdInt}         
+        sekolahId={sekolahIdInt}   
+        mapelDefault={mapelGuru}      // 💡 Tetap ID Mapel untuk kebutuhan payload simpan data
+        namaMapelTxt={namaMapelTxt}  // 💡 Oper Nama Mapel teks asli ke Client Component
         semesterDefault={semesterPilihan}
-        dataLama={dataLama} // Dikirim ke komponen form untuk membedakan Mode Tambah / Edit
+        dataLama={dataLama}        
         detailMurid={{
           nama: murid.nama,
           nisn: murid.nisn,

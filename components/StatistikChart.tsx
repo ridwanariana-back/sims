@@ -1,3 +1,5 @@
+// components/StatistikChart.tsx
+
 "use client";
 
 import { 

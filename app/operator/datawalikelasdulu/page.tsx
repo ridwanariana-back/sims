@@ -1,13 +1,39 @@
+// app/operator/datawalikelasdulu/page.tsx
+import { auth } from '@/auth';
+import { redirect } from 'next/navigation';
 import { sql } from '@vercel/postgres';
 import { History, ArrowLeft, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
 import WaliKelasTable from '@/components/WaliKelasTable';
 
-export default async function WaliKelasDuluPage() {
+export default async function WaliKelasWaliPage() {
+  const session = await auth();
+  if (!session || session.user.role?.toLowerCase() !== 'operator') {
+    redirect('/');
+  }
+
+  // 1. Ambil sekolah_id dari session operator untuk mengamankan data
+  const sId = session.user.sekolah_id || (session.user as any).sekolahId;
+  const sekolahIdInt = sId ? parseInt(sId.toString(), 10) : null;
+
+  if (!sekolahIdInt) {
+    return <div className="p-6 text-center text-rose-600 font-bold">Error: ID Sekolah tidak ditemukan.</div>;
+  }
+
+  // 2. Ambil data master nama kelas milik sekolah ini (wajib dioper ke komponen)
+  const { rows: allKelas } = await sql`
+    SELECT id, nama_kelas 
+    FROM kelas 
+    WHERE sekolah_id = ${sekolahIdInt} 
+    ORDER BY nama_kelas ASC
+  `;
+
+  // 3. Filter query menggunakan WHERE sekolah_id agar data yang tampil tidak campur aduk
   const { rows: allWaliData } = await sql`
     SELECT wk.id, g.nama as nama_guru, g.nip, wk.rombel, wk.tahun_ajaran, wk.guru_id
     FROM wali_kelas wk 
     JOIN guru g ON wk.guru_id = g.id
+    WHERE wk.sekolah_id = ${sekolahIdInt}
     ORDER BY wk.tahun_ajaran DESC, wk.rombel ASC
   `;
 
@@ -27,9 +53,11 @@ export default async function WaliKelasDuluPage() {
         <p className="text-slate-500 font-bold text-xs uppercase mt-1">Arsip data penugasan periode terdahulu</p>
       </div>
 
-      {/* Gunakan komponen table yang sama dengan flag isReadOnly[cite: 1] */}
+      {/* 4. Panggil komponen dengan melengkapi prop yang dibutuhkan */}
       <WaliKelasTable 
+        allKelas={allKelas}
         currentWali={allWaliData} 
+        sekolahId={sekolahIdInt}
         isReadOnly={true} 
       />
 

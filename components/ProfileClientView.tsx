@@ -1,3 +1,4 @@
+//components/ProfileClientView.tsx
 "use client";
 
 import Image from "next/image";
@@ -6,7 +7,9 @@ import { useSession } from "next-auth/react";
 export default function ProfileClientView({ initialSession }: { initialSession: any }) {
   const { data: session } = useSession();
   const currentUser = session?.user || initialSession.user;
-
+  const showUsernameRoles = ["guru", "kepalasekolah", "wakilkurikulum", "wakilkesiswaan"];
+  const isAllowedRole = showUsernameRoles.includes(currentUser.role?.toLowerCase() || "");
+  
   return (
     <div className="flex items-center gap-6">
       <div className="w-24 h-24 rounded-full bg-gray-100 overflow-hidden relative border-4 border-blue-50 shadow-sm">
@@ -25,11 +28,11 @@ export default function ProfileClientView({ initialSession }: { initialSession: 
         <p className="font-bold text-2xl text-gray-900 mt-1">{currentUser.name}</p>
         
         {/* Username/ID hanya muncul jika role adalah Guru */}
-        {currentUser.role === 'guru' && (
-          <p className="text-sm text-gray-500 font-medium tracking-wide">
-            ID/Username: {currentUser.username || "-"}
-          </p>
-        )}
+        {isAllowedRole && (
+  <p className="text-sm text-gray-500 font-medium tracking-wide">
+    ID/Username: {currentUser.username || "-"}
+  </p>
+)}
       </div>
     </div>
   );

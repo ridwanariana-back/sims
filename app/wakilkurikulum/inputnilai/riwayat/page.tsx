@@ -1,5 +1,3 @@
-// app/guru/inputnilai/riwayat/page.tsx
-
 import { auth } from "@/auth";
 import { sql } from "@vercel/postgres";
 import { redirect } from "next/navigation";
@@ -11,34 +9,66 @@ import { getTahunAjaranDinamis } from "@/lib/actions";
 export default async function RiwayatInputNilaiPage() {
   const session = await auth();
   
-  // Proteksi Route
-  if (!session?.user || session.user.role !== "wakilkurikulum") {
+  // Proteksi Route: Hanya Guru yang bisa akses
+  if (!session?.user || session.user.role?.toLowerCase() !== "wakilkurikulum") {
     redirect("/");
   }
 
   const tahunAjaranAktif = await getTahunAjaranDinamis();
-  const nipGuru = session.user.username; 
 
-  // 1. Ambil data mapel guru berdasarkan NIP
-  const guruRes = await sql`SELECT mapel FROM guru WHERE nip = ${nipGuru}`;
+  // 1. Ambil sekolah_id dan User ID dari session login
+  const sId = session.user.sekolah_id || (session.user as any).sekolahId;
+  const sekolahIdInt = sId ? parseInt(sId.toString(), 10) : null;
+  const userIdFromSession = session.user.id;
+
+  if (!sekolahIdInt || !userIdFromSession) {
+    return (
+      <div className="p-6 text-center text-rose-600 font-bold bg-white rounded-3xl border-2 border-rose-100 m-8">
+        Error: Autentikasi Gagal atau ID Sekolah tidak ditemukan.
+      </div>
+    );
+  }
+
+  // 2. Ambil data asli guru dan mapel menggunakan INNER JOIN satu pintu demi efisiensi
+  const guruRes = await sql`
+    SELECT g.id, g.mapel 
+    FROM users u
+    INNER JOIN guru g ON u.guru_id = g.id
+    WHERE u.id = ${userIdFromSession}
+  `;
   const guruData = guruRes.rows[0];
-  const mapelGuru = guruData?.mapel || "Mapel";
 
-  // 2. Query khusus mengambil Murid yang SUDAH PERNAH diinput nilainya oleh guru ini
-  // Menggunakan DISTINCT agar nama murid tidak ganda jika ganjil & genapnya sudah terisi
+  if (!guruData) {
+    redirect("/wakilkurikulum/inputnilai");
+  }
+
+  const guruIdInt = guruData.id; // ID Integer asli dari tabel guru
+  const mapelGuru = guruData.mapel || ""; // 💡 Sekarang berisi ID Mapel (misal: "12")
+
+  // 💡 AMBIL NAMA MAPEL ASLI UNTUK TEKS DI HEADER UI
+  let namaMapelTxt = "Mata Pelajaran";
+  if (mapelGuru) {
+    const mapelNameRes = await sql`SELECT nama_mapel FROM mapel WHERE id = ${parseInt(mapelGuru.toString(), 10)}`;
+    if (mapelNameRes.rows.length > 0) {
+      namaMapelTxt = mapelNameRes.rows[0].nama_mapel;
+    }
+  }
+
+  // 3. Query khusus mengambil Murid yang SUDAH PERNAH diinput nilainya di sekolah & oleh guru ini
   const muridRes = await sql`
     SELECT DISTINCT ON (m.nama)
       m.id, m.nama, m.nisn, m.kelas, m.rombel,
       
-      (SELECT id FROM nilai WHERE murid_id = m.id AND guru_id::text = ${nipGuru}::text AND mapel = ${mapelGuru} AND semester = 'Ganjil' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as id_ganjil,
-      (SELECT nilai_angka FROM nilai WHERE murid_id = m.id AND guru_id::text = ${nipGuru}::text AND mapel = ${mapelGuru} AND semester = 'Ganjil' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as angka_ganjil,
+      (SELECT id FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${mapelGuru} AND semester = 'Ganjil' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as id_ganjil,
+      (SELECT nilai_angka FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${mapelGuru} AND semester = 'Ganjil' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as angka_ganjil,
       
-      (SELECT id FROM nilai WHERE murid_id = m.id AND guru_id::text = ${nipGuru}::text AND mapel = ${mapelGuru} AND semester = 'Genap' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as id_genap,
-      (SELECT nilai_angka FROM nilai WHERE murid_id = m.id AND guru_id::text = ${nipGuru}::text AND mapel = ${mapelGuru} AND semester = 'Genap' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as angka_genap
+      (SELECT id FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${mapelGuru} AND semester = 'Genap' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as id_genap,
+      (SELECT nilai_angka FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${mapelGuru} AND semester = 'Genap' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as angka_genap
     FROM murid m
     INNER JOIN nilai n ON m.id = n.murid_id
-    WHERE n.guru_id::text = ${nipGuru}::text
-      AND n.mapel = ${mapelGuru}
+    WHERE n.guru_id = ${guruIdInt}         
+      AND n.sekolah_id = ${sekolahIdInt}   
+      AND n.mapel = ${mapelGuru} -- 💡 Tetap membandingkan ID Mapel di database
       AND n.tahun_ajaran = ${tahunAjaranAktif}
     ORDER BY m.nama ASC
   `;
@@ -46,7 +76,7 @@ export default async function RiwayatInputNilaiPage() {
   const tableData = muridRes.rows;
 
   return (
-    <div className="p-6 lg:p-10 space-y-8">
+    <div className="p-6 lg:p-10 space-y-8 text-left">
       {/* Header Halaman */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b pb-6">
         <div>
@@ -58,7 +88,8 @@ export default async function RiwayatInputNilaiPage() {
           </div>
           <h1 className="text-2xl font-extrabold text-slate-800">Siswa Sudah Diisi Nilai</h1>
           <p className="text-slate-500 text-sm">
-            Mata Pelajaran: <span className="font-bold text-slate-700">{mapelGuru}</span>
+            {/* 💡 SEKARANG MENGGUNAKAN namaMapelTxt AGAR YANG KELUAR NAMA MAPELNYA */}
+            Mata Pelajaran: <span className="font-bold text-slate-700">{namaMapelTxt}</span>
           </p>
         </div>
 
@@ -76,11 +107,11 @@ export default async function RiwayatInputNilaiPage() {
         💡 Menampilkan daftar semua murid yang <strong>sudah memiliki data nilai</strong> ganjil/genap pada mata pelajaranmu. Kamu bisa langsung klik tombol untuk edit nilai atau isi semester genap.
       </div>
 
-      {/* Gunakan NilaiTable milikmu yang sudah jadi untuk merender list datanya */}
+      {/* Tabel Data Riwayat */}
       {tableData.length > 0 ? (
         <NilaiTable initialData={tableData} />
       ) : (
-        <div className="text-center py-12 border border-dashed rounded-3xl text-slate-400 font-medium">
+        <div className="text-center py-12 border border-dashed rounded-3xl text-slate-400 font-medium bg-white">
           Belum ada data murid yang pernah kamu input nilainya pada periode ini.
         </div>
       )}

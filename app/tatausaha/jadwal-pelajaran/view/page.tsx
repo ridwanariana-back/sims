@@ -1,5 +1,3 @@
-// app/tatausaha/jadwal-pelajaran/view/page.tsx
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -7,70 +5,81 @@ import {
   Calendar, 
   BookOpen, 
   Clock, 
-  Users, 
   Trash2, 
   Edit, 
   X, 
   Save, 
   Loader2, 
-  ArrowLeft,
-  UserCheck
+  ArrowLeft
 } from "lucide-react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { 
   getJadwalPelajaran, 
   getTahunAjaranDinamis, 
   deleteJadwalPelajaran, 
   updateJadwalPelajaran,
-  getDaftarGuru // Pastikan fungsi ini diexport dari actions.ts
+  getDaftarGuru,
+  getDaftarKelas,
+  getDaftarMapel
 } from "@/lib/actions";
 
-const DAFTAR_HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat"];
-const DAFTAR_MAPEL = [
-  "PAI & BudiPekerti", "PKN", "Bahasa Indonesia", "Bahasa Inggris", 
-  "Bahasa Inggris Tingkat Lanjut", "Matematika Wajib", "Matematika Tingkat Lanjut", 
-  "Fisika", "Fisika Mapel Pilihan", "Biologi", "Biologi Mapel Pilihan", 
-  "Kimia", "Kimia Mapel Pilihan", "Sejarah", "Sejarah Tingkat Lanjut", 
-  "Geografi", "Geografi Mapel Pilihan", "Ekonomi", "Ekonomi Mapel Pilihan", 
-  "Sosiologi", "Sosiologi Mapel Pilihan", "Seni Budaya", "Penjas Orkes", 
-  "PKWU", "Informatika", "Bimbingan Konseling"
-];
-
-const KEGIATAN_SEKOLAH = [
-  "Upacara Bendera", "Istirahat", "Isoma", "SMANSA Student Performance", 
-  "Membaca Al Qur'an", "Senam", "Imtaq"
-];
+const DAFTAR_HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
 export default function ViewJadwalPage() {
+  const { data: session } = useSession();
+  
+  const sId = session?.user?.sekolah_id || (session?.user as any)?.sekolahId;
+  const sekolahIdInt = sId ? parseInt(sId.toString()) : null;
+
   const [jadwal, setJadwal] = useState<any[]>([]);
   const [allGurus, setAllGurus] = useState<any[]>([]);
+  const [allKelas, setAllKelas] = useState<any[]>([]);
+  const [allMapel, setAllMapel] = useState<any[]>([]);
   const [filteredJadwal, setFilteredJadwal] = useState<any[]>([]);
   const [tahunAjaran, setTahunAjaran] = useState("");
   const [loading, setLoading] = useState(true);
   
-  // Filter States
   const [selectedHari, setSelectedHari] = useState("Senin");
-  const [selectedKelas, setSelectedKelas] = useState("X");
-  const [selectedRombel, setSelectedRombel] = useState("X.1");
+  const [selectedKelas, setSelectedKelas] = useState("");
+  const [selectedRombel, setSelectedRombel] = useState("");
 
-  // Edit Modal States
   const [editingItem, setEditingItem] = useState<any>(null);
   const [updateLoading, setUpdateLoading] = useState(false);
 
+  // State bantuan untuk memegang ID mapel yang sedang dipilih di dalam modal edit
+  const [modalSelectedMapel, setModalSelectedMapel] = useState("");
+
   useEffect(() => {
+    if (sekolahIdInt === null || isNaN(sekolahIdInt)) return;
+
     async function init() {
+      setLoading(true);
       const ta = await getTahunAjaranDinamis();
       setTahunAjaran(ta);
       
-      const resGuru = await getDaftarGuru();
-      setAllGurus(resGuru || []);
+      const currentSekolahId: number = sekolahIdInt as number;
 
-      const data = await getJadwalPelajaran();
-      setJadwal(data || []);
+      const resGuru = await getDaftarGuru(currentSekolahId);
+      const resKelas = await getDaftarKelas(currentSekolahId);
+      const resMapel = await getDaftarMapel(currentSekolahId);
+      const resJadwal = await getJadwalPelajaran(ta, currentSekolahId);
+
+      setAllGurus(resGuru || []);
+      setAllKelas(resKelas || []);
+      setAllMapel(resMapel || []);
+      setJadwal(resJadwal || []);
+
+      if (resKelas && resKelas.length > 0) {
+        const tingkatAwal = resKelas[0].tingkat.toString();
+        setSelectedKelas(tingkatAwal);
+        setSelectedRombel(resKelas[0].nama_kelas);
+      }
+
       setLoading(false);
     }
     init();
-  }, []);
+  }, [sekolahIdInt]);
 
   useEffect(() => {
     const filtered = jadwal.filter(item => 
@@ -81,9 +90,15 @@ export default function ViewJadwalPage() {
     setFilteredJadwal(filtered);
   }, [jadwal, selectedHari, selectedKelas, selectedRombel]);
 
+  const daftarTingkatUnik = Array.from(new Set(allKelas.map(k => k.tingkat.toString()))).sort();
+  const rombelTersediaSesuaiFilter = allKelas.filter(k => k.tingkat.toString() === selectedKelas);
+
   const handleDelete = async (id: number) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus jadwal this?")) return;
-    const res = await deleteJadwalPelajaran(id);
+    if (!confirm("Apakah Anda yakin ingin menghapus jadwal ini?")) return;
+    if (!sekolahIdInt) return alert("Sesi sekolah tidak valid.");
+
+    const res = await deleteJadwalPelajaran(id, sekolahIdInt); 
+    
     if (res.success) {
       setJadwal(jadwal.filter(item => item.id !== id));
       alert("Jadwal berhasil dihapus");
@@ -94,6 +109,8 @@ export default function ViewJadwalPage() {
 
   const handleUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!sekolahIdInt) return;
+
     setUpdateLoading(true);
     const formData = new FormData(e.currentTarget);
     
@@ -104,22 +121,30 @@ export default function ViewJadwalPage() {
     const jam_selesai = formData.get("jam_selesai") as string;
 
     const res = await updateJadwalPelajaran(id, { 
-      mapel, 
+      hari: editingItem.hari,   
+      kelas: editingItem.kelas, 
+      rombel: editingItem.rombel,
+      mapel, // Menyimpan ID Mapel string
       guru_id: guru_id ? parseInt(guru_id) : null, 
       jam_mulai, 
       jam_selesai 
-    });
+    }, sekolahIdInt);
 
     if (res.success) {
-      // Refresh data dari DB agar info JOIN guru_nya ikut terupdate paling baru
-      const data = await getJadwalPelajaran();
-      setJadwal(data || []);
+      const updatedJadwal = await getJadwalPelajaran(tahunAjaran, sekolahIdInt);
+      setJadwal(updatedJadwal || []);
       setEditingItem(null);
       alert("Jadwal berhasil diperbarui!");
     } else {
       alert(res.message || "Gagal memperbarui jadwal");
     }
     setUpdateLoading(false);
+  };
+
+  // Trigger modal edit dan amankan tracking state ID mapel awal
+  const bukaModalEdit = (item: any) => {
+    setEditingItem(item);
+    setModalSelectedMapel(item.mapel?.toString() || "");
   };
 
   return (
@@ -148,22 +173,34 @@ export default function ViewJadwalPage() {
 
         <div className="space-y-1">
           <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Tingkat Kelas</label>
-          <select value={selectedKelas} onChange={(e) => {
-            setSelectedKelas(e.target.value);
-            setSelectedRombel(`${e.target.value}.1`);
-          }} className="w-full p-3.5 bg-slate-100 border-2 border-transparent focus:border-slate-900 rounded-xl font-bold text-xs outline-none transition-all">
-            <option value="X">Kelas X</option>
-            <option value="XI">Kelas XI</option>
-            <option value="XII">Kelas XII</option>
+          <select 
+            value={selectedKelas} 
+            onChange={(e) => {
+              const kelasTerpilih = e.target.value;
+              setSelectedKelas(kelasTerpilih);
+              const rombelPertama = allKelas.find(k => k.tingkat.toString() === kelasTerpilih);
+              setSelectedRombel(rombelPertama ? rombelPertama.nama_kelas : "");
+            }} 
+            className="w-full p-3.5 bg-slate-100 border-2 border-transparent focus:border-slate-900 rounded-xl font-bold text-xs outline-none transition-all"
+          >
+            {daftarTingkatUnik.length === 0 ? (
+              <option value="">Belum ada data kelas</option>
+            ) : (
+              daftarTingkatUnik.map(t => <option key={t} value={t}>Kelas {t}</option>)
+            )}
           </select>
         </div>
 
         <div className="space-y-1">
           <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Rombongan Belajar</label>
           <select value={selectedRombel} onChange={(e) => setSelectedRombel(e.target.value)} className="w-full p-3.5 bg-slate-100 border-2 border-transparent focus:border-slate-900 rounded-xl font-bold text-xs outline-none transition-all">
-            {Array.from({ length: 6 }, (_, i) => `${selectedKelas}.${i + 1}`).map(r => (
-              <option key={r} value={r}>{r}</option>
-            ))}
+            {rombelTersediaSesuaiFilter.length === 0 ? (
+              <option value="">Pilih Rombel</option>
+            ) : (
+              rombelTersediaSesuaiFilter.map(r => (
+                <option key={r.id} value={r.nama_kelas}>{r.nama_kelas}</option>
+              ))
+            )}
           </select>
         </div>
       </div>
@@ -181,70 +218,72 @@ export default function ViewJadwalPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredJadwal.map((item) => (
-            <div key={item.id} className="bg-white rounded-[2rem] border-2 border-slate-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group relative overflow-hidden">
-              <div className="space-y-4">
-                {/* Waktu Badge */}
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-wider">
-                    <Clock size={12} />
-                    {item.jam_mulai.slice(0, 5)} - {item.jam_selesai.slice(0, 5)}
+          {filteredJadwal.map((item) => {
+            // 💡 RE-MAPPING NAMA MAPEL: Cari nama mapel asli berdasarkan ID mapel yang disimpan
+            const mapelObj = allMapel.find(m => m.id.toString() === item.mapel?.toString());
+            const namaMapelAsli = mapelObj ? mapelObj.nama_mapel : `ID Mapel: ${item.mapel}`;
+
+            return (
+              <div key={item.id} className="bg-white rounded-[2rem] border-2 border-slate-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group relative overflow-hidden">
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-wider">
+                      <Clock size={12} />
+                      {item.jam_mulai.slice(0, 5)} - {item.jam_selesai.slice(0, 5)}
+                    </div>
+                    <div className="flex gap-1 transition-all">
+                      <button onClick={() => bukaModalEdit(item)} className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-all">
+                        <Edit size={14} />
+                      </button>
+                      <button onClick={() => handleDelete(item.id)} className="p-2 text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 rounded-lg transition-all">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    <button onClick={() => setEditingItem(item)} className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-all">
-                      <Edit size={14} />
-                    </button>
-                    <button onClick={() => handleDelete(item.id)} className="p-2 text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 rounded-lg transition-all">
-                      <Trash2 size={14} />
-                    </button>
+
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2.5 bg-slate-100 text-slate-800 rounded-xl mt-0.5">
+                        <BookOpen size={16} />
+                      </div>
+                      <div>
+                        {/* 💡 Menampilkan Nama Mapel asli hasil mapping */}
+                        <h3 className="font-black text-slate-900 text-sm tracking-tight leading-snug uppercase">{namaMapelAsli}</h3>
+                        
+                        {item.nama_guru ? (
+                          <div className="mt-1.5 flex flex-col text-[11px] font-bold text-slate-500">
+                            <span className="text-slate-800 font-extrabold flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              {item.nama_guru}
+                            </span>
+                            <span className="text-[9px] text-slate-400 ml-2.5">NIP. {item.nip_guru || "-"}</span>
+                          </div>
+                        ) : (
+                          <div className="mt-1 text-[10px] font-bold text-slate-400 italic flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                            Tidak Ada Guru / Kegiatan Umum
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Informasi Utama */}
-                <div className="space-y-2">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2.5 bg-slate-100 text-slate-800 rounded-xl mt-0.5">
-                      <BookOpen size={16} />
-                    </div>
-                    <div>
-                      <h3 className="font-black text-slate-900 text-sm tracking-tight leading-snug uppercase">{item.mapel}</h3>
-                      
-                      {/* FITUR BARU: Menampilkan Nama Guru dan NIP tepat di bawah Mapel */}
-                      {item.nama_guru ? (
-                        <div className="mt-1.5 flex flex-col text-[11px] font-bold text-slate-500">
-                          <span className="text-slate-800 font-extrabold flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                            {item.nama_guru}
-                          </span>
-                          <span className="text-[9px] text-slate-400 ml-2.5">NIP. {item.nip_guru || "-"}</span>
-                        </div>
-                      ) : (
-                        <div className="mt-1 text-[10px] font-bold text-slate-400 italic flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
-                          Tidak Ada Guru / Kegiatan Umum
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                <div className="mt-5 pt-4 border-t border-slate-50 flex justify-between items-center text-[10px] font-bold text-slate-400">
+                  <span className="uppercase tracking-wider">Rombel {item.rombel}</span>
+                  <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 uppercase tracking-tighter text-[9px] font-black">Kelas {item.kelas}</span>
                 </div>
               </div>
-
-              {/* Rombel Badge Info Footer */}
-              <div className="mt-5 pt-4 border-t border-slate-50 flex justify-between items-center text-[10px] font-bold text-slate-400">
-                <span className="uppercase tracking-wider">Rombel {item.rombel}</span>
-                <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 uppercase tracking-tighter text-[9px] font-black">Kelas {item.kelas}</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* DIALOG POPUP / MODAL EDIT */}
+      {/* DIALOG POPUP MODAL EDIT */}
       {editingItem && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-lg rounded-[2.5rem] border-2 border-slate-100 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
             
-            {/* Modal Header */}
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <div>
                 <h2 className="text-lg font-black text-slate-900 uppercase tracking-tighter">Edit Data Jadwal</h2>
@@ -255,57 +294,69 @@ export default function ViewJadwalPage() {
               </button>
             </div>
 
-            {/* Modal Form Body */}
             <form onSubmit={handleUpdate} className="p-6 md:p-8 space-y-6">
-              
-              {/* DROPDOWN MAPEL + KEGIATAN */}
+              {/* DROPDOWN MAPEL + KEGIATAN (VALUE DIUBAH MENJADI ID) */}
               <div className="space-y-1">
                 <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Mata Pelajaran / Kegiatan</label>
                 <select 
                   name="mapel" 
-                  defaultValue={editingItem.mapel}
+                  value={modalSelectedMapel}
                   onChange={(e) => {
-                    const selectedMapel = e.target.value;
+                    const nextMapelId = e.target.value;
+                    setModalSelectedMapel(nextMapelId);
+                    
                     const selectGuru = document.getElementById("modal_guru_select") as HTMLSelectElement;
                     if (selectGuru) {
-                      // Auto filter / set guru yang cocok jika mapel diubah
-                      const guruCocok = allGurus.find(g => g.mapel === selectedMapel);
-                      selectGuru.value = guruCocok ? guruCocok.id.toString() : "";
+                      const targetMapelObj = allMapel.find(m => m.id.toString() === nextMapelId.toString());
+                      
+                      if (targetMapelObj?.kelompok === "Kegiatan") {
+                        selectGuru.value = "";
+                        selectGuru.disabled = true;
+                      } else {
+                        selectGuru.disabled = false;
+                        // Pencarian kecocokan guru berdasarkan ID mapel yang string-nya sama
+                        const guruCocok = allGurus.find(g => g.mapel?.toString() === nextMapelId.toString());
+                        selectGuru.value = guruCocok ? guruCocok.id.toString() : "";
+                      }
                     }
                   }}
                   className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-slate-900 rounded-xl font-bold text-xs outline-none transition-all"
                 >
+                  <option value="">Pilih Mapel / Kegiatan</option>
                   <optgroup label="MATA PELAJARAN">
-                    {DAFTAR_MAPEL.map(m => <option key={m} value={m}>{m}</option>)}
+                    {allMapel.filter(m => m.kelompok !== "Kegiatan").map(m => (
+                      <option key={m.id} value={m.id}>{m.nama_mapel} ({m.kelompok})</option>
+                    ))}
                   </optgroup>
                   <optgroup label="KEGIATAN SEKOLAH">
-                    {KEGIATAN_SEKOLAH.map(k => <option key={k} value={k}>{k}</option>)}
+                    {allMapel.filter(m => m.kelompok === "Kegiatan").map(m => (
+                      <option key={m.id} value={m.id}>{m.nama_mapel}</option>
+                    ))}
                   </optgroup>
                 </select>
               </div>
 
-              {/* DROPDOWN GURU DENGAN FITUR OPTGROUP SINKRON */}
+              {/* DROPDOWN GURU */}
               <div className="space-y-1">
                 <label className="text-[9px] font-black text-indigo-600 uppercase ml-2">Guru Pengampu</label>
                 <select 
                   id="modal_guru_select"
                   name="guru_id" 
                   defaultValue={editingItem.guru_id || ""}
-                  className="w-full p-4 bg-indigo-50/50 border-2 border-transparent focus:border-indigo-600 rounded-xl font-bold text-xs outline-none transition-all"
+                  disabled={allMapel.find(m => m.id.toString() === modalSelectedMapel)?.kelompok === "Kegiatan"}
+                  className="w-full p-4 bg-indigo-50/50 border-2 border-transparent focus:border-indigo-600 rounded-xl font-bold text-xs outline-none transition-all disabled:opacity-40 disabled:bg-slate-100"
                 >
                   <option value="">-- Tidak Ada Guru / Kegiatan --</option>
                   
-                  {/* Grup Guru yang cocok dengan mapel aktif saat ini */}
                   <optgroup label="GURU MAPEL INI">
-                    {allGurus.filter(g => g.mapel === editingItem.mapel).map(g => (
-                      <option key={g.id} value={g.id}>{g.nama} (NIP: {g.nip})</option>
+                    {allGurus.filter(g => g.mapel?.toString() === modalSelectedMapel).map(g => (
+                      <option key={g.id} value={g.id}>{g.nama} (NIP: {g.nip || "-"})</option>
                     ))}
                   </optgroup>
 
-                  {/* Backup Semua Guru */}
                   <optgroup label="SEMUA DAFTAR GURU">
                     {allGurus.map(g => (
-                      <option key={g.id} value={g.id}>{g.nama} (NIP: {g.nip})</option>
+                      <option key={g.id} value={g.id}>{g.nama} (NIP: {g.nip || "-"})</option>
                     ))}
                   </optgroup>
                 </select>

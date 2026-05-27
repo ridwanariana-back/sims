@@ -1,3 +1,4 @@
+// components/AddUserModal.tsx
 "use client";
 
 import { useState } from "react";
@@ -8,10 +9,11 @@ interface Guru {
   id: number;
   nip: string;
   nama: string;
-  jenis?: string; // Kembali menggunakan 'jenis' setelah kolom dibersihkan
+  jenis?: string;
 }
 
-export default function AddUserModal({ listGuru }: { listGuru: Guru[] }) {
+// Tambahkan prop sekolahId di sini
+export default function AddUserModal({ listGuru, sekolahId }: { listGuru: Guru[]; sekolahId: number }) {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   
@@ -24,18 +26,13 @@ export default function AddUserModal({ listGuru }: { listGuru: Guru[] }) {
     role: "" 
   });
 
-  // LOGIKA MAPPING ROLE OTOMATIS BERDASARKAN KOLOM 'JENIS'[cite: 7]
   const handleSelectGuru = (id: string) => {
     const selected = listGuru.find(g => g.id.toString() === id);
-    
     if (selected) {
-      // Ambil data dari kolom 'jenis' (Fallback ke string kosong jika null)[cite: 7]
       const rawJenis = selected.jenis || "";
       const jenisPegawai = rawJenis.toLowerCase().trim();
-      
-      let roleOtomatis = "guru"; // Role default jika tidak cocok dengan kriteria di bawah[cite: 7]
+      let roleOtomatis = "guru";
 
-      // Penentuan role berdasarkan isi kolom jenis[cite: 7]
       if (jenisPegawai === "kepala sekolah") {
         roleOtomatis = "kepalasekolah";
       } else if (jenisPegawai === "wakil kurikulum") {
@@ -66,9 +63,10 @@ export default function AddUserModal({ listGuru }: { listGuru: Guru[] }) {
     data.append("name", formData.name);
     data.append("username", formData.username);
     data.append("password", formData.password);
-    data.append("role", formData.role); // Role otomatis dikirim ke server action[cite: 7]
+    data.append("role", formData.role);
 
-    const res = await createUserAccount(data);
+    // 🔥 Kirim data beserta variabel sekolahId ke Server Action
+    const res = await createUserAccount(data, sekolahId);
 
     if (res.success) {
       setIsOpen(false);
@@ -121,7 +119,6 @@ export default function AddUserModal({ listGuru }: { listGuru: Guru[] }) {
                 </select>
               </div>
 
-              {/* TAMPILAN PREVIEW OTOMATIS */}
               <div className="bg-slate-50 p-5 rounded-2xl border-2 border-dashed border-slate-200 space-y-4">
                 <div className="flex justify-between items-center">
                   <div>

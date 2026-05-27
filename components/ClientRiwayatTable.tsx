@@ -1,4 +1,3 @@
-// app/guru/riwayat-nilai/ClientRiwayatTable.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -15,7 +14,8 @@ export default function ClientRiwayatTable({ initialData }: { initialData: any[]
 
   const filteredData = initialData.filter(item => 
     item.nama_murid.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.mapel.toLowerCase().includes(searchTerm.toLowerCase())
+    // 💡 GANTI JADI nama_mapel BIAR FILTER FITUR PENCARIAN SINKRON DENGAN NAMA TEKS ASLINYA
+    (item.nama_mapel && item.nama_mapel.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -71,7 +71,8 @@ export default function ClientRiwayatTable({ initialData }: { initialData: any[]
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-3">
                         <BookOpen size={16} className="text-slate-400" />
-                        <p className="text-[11px] font-black text-slate-700 uppercase tracking-tight">{item.mapel}</p>
+                        {/* 💡 GANTI JADI item.nama_mapel AGAR NAMA MAPEL TEKS YANG DISHOW */}
+                        <p className="text-[11px] font-black text-slate-700 uppercase tracking-tight">{item.nama_mapel || "Mata Pelajaran"}</p>
                       </div>
                     </td>
                     <td className="px-8 py-6">

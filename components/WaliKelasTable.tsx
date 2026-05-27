@@ -1,12 +1,23 @@
+// components/WaliKelasTable.tsx
 "use client";
 
 import { useState, useMemo } from "react";
 import { Trash2, Plus, X, ShieldCheck, Edit3, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-const DAFTAR_ROMBEL = ["X.1", "X.2", "X.3", "X.4", "XI.F1", "XI.F2", "XI.F3", "XI.F4", "XII.F1", "XII.F2", "XII.F3", "XII.F4"];
-
-export default function WaliKelasTable({ allGuru, currentWali, isReadOnly = false }: { allGuru?: any[], currentWali: any[], isReadOnly?: boolean }) {
+export default function WaliKelasTable({ 
+  allGuru = [], 
+  allKelas = [], 
+  currentWali = [], 
+  sekolahId, 
+  isReadOnly = false 
+}: { 
+  allGuru?: any[], 
+  allKelas?: any[], 
+  currentWali: any[], 
+  sekolahId: number, 
+  isReadOnly?: boolean 
+}) {
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [editingData, setEditingData] = useState<any>(null);
@@ -41,10 +52,10 @@ export default function WaliKelasTable({ allGuru, currentWali, isReadOnly = fals
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentItems = filteredData.slice(indexOfFirstItem, indexOfLastItem);
 
-  // Dropdown filter untuk Modal
+  // Dropdown filter untuk Modal (menggunakan master tabel database)
   const availableGuru = allGuru?.filter(g => !displayData.some(wk => wk.guru_id === g.id)) || [];
-  const availableRombelTambah = DAFTAR_ROMBEL.filter(r => !displayData.some(wk => wk.rombel === r));
-  const availableRombelEdit = DAFTAR_ROMBEL.filter(r => !displayData.some(wk => wk.rombel === r) || (editingData && r === editingData.rombel));
+  const availableRombelTambah = allKelas.filter(k => !displayData.some(wk => wk.rombel === k.nama_kelas));
+  const availableRombelEdit = allKelas.filter(k => !displayData.some(wk => wk.rombel === k.nama_kelas) || (editingData && k.nama_kelas === editingData.rombel));
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -59,12 +70,19 @@ export default function WaliKelasTable({ allGuru, currentWali, isReadOnly = fals
         id: editingData?.id,
         guru_id: isEdit ? editingData.guru_id : formData.get("guru_id"),
         rombel: formData.get("rombel"),
-        tahun_ajaran: TAHUN_AKTIF
+        tahun_ajaran: TAHUN_AKTIF,
+        sekolahId: sekolahId
       }),
     });
 
-    if (res.ok) { setShowModal(false); setEditingData(null); router.refresh(); }
-    else { const err = await res.json(); alert(err.error); }
+    if (res.ok) { 
+      setShowModal(false); 
+      setEditingData(null); 
+      router.refresh(); 
+    } else { 
+      const err = await res.json(); 
+      alert(err.error); 
+    }
     setLoading(false);
   };
 
@@ -91,48 +109,54 @@ export default function WaliKelasTable({ allGuru, currentWali, isReadOnly = fals
       </div>
 
       {/* TABEL UTAMA */}
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-200 font-black text-slate-500 text-[10px] uppercase tracking-widest">
-              <th className="px-8 py-5">Nama Guru Pengampu</th>
-              <th className="px-8 py-5 text-center">Rombel</th>
-              <th className="px-8 py-5 text-center">Periode</th>
-              {!isReadOnly && <th className="px-8 py-5 text-center">Aksi</th>}
+<div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+  {/* 🔥 TAMBAHKAN DIV PEMBUNGKUS INI SUPAYA BISA DIGESER (SCROLL HORIZONTAL) DI HP */}
+  <div className="w-full overflow-x-auto scrollbar-thin"> 
+    <table className="w-full text-left min-w-[600px]">
+      <thead>
+        <tr className="bg-slate-50 border-b border-slate-200 font-black text-slate-500 text-[10px] uppercase tracking-widest">
+          <th className="px-8 py-5">Nama Guru Pengampu</th>
+          <th className="px-8 py-5 text-center">Rombel</th>
+          <th className="px-8 py-5 text-center">Periode</th>
+          {!isReadOnly && <th className="px-8 py-5 text-center">Aksi</th>}
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-slate-100 font-black text-slate-900 uppercase text-sm">
+        {currentItems.length === 0 ? (
+          <tr><td colSpan={isReadOnly ? 3 : 4} className="px-8 py-10 text-center text-slate-300 italic font-bold">Data tidak ditemukan.</td></tr>
+        ) : (
+          currentItems.map((wk) => (
+            <tr key={wk.id} className="hover:bg-slate-50 transition-all">
+              <td className="px-8 py-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600"><ShieldCheck size={22}/></div>
+                  <div>
+                    <p className="leading-tight whitespace-nowrap">{wk.nama_guru}</p> {/* 💡 whitespace-nowrap biar nama ga kepotong ke bawah */}
+                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">NIP: {wk.nip || '-'}</p>
+                  </div>
+                </div>
+              </td>
+              <td className="px-8 py-6 text-center">
+                <span className="bg-slate-900 text-white px-4 py-1.5 rounded-xl text-[11px] border-2 border-slate-800">{wk.rombel}</span>
+              </td>
+              <td className="px-8 py-6 text-center text-slate-400 text-xs font-bold whitespace-nowrap">{wk.tahun_ajaran}</td>
+              {!isReadOnly && (
+                <td className="px-8 py-6 text-center">
+                  <div className="flex justify-center gap-2">
+                    <button onClick={() => setEditingData(wk)} className="p-2.5 border-2 border-slate-100 text-amber-500 hover:border-amber-500 rounded-xl transition-all bg-white"><Edit3 size={18} /></button>
+                    <button onClick={async () => { if(confirm('Hapus status wali kelas?')) { await fetch(`/api/walikelas?id=${wk.id}`, {method:'DELETE'}); router.refresh(); }}} className="p-2.5 border-2 border-slate-100 text-red-600 hover:border-red-600 rounded-xl transition-all bg-white"><Trash2 size={18} /></button>
+                  </div>
+                </td>
+              )}
             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 font-black text-slate-900 uppercase text-sm">
-            {currentItems.length === 0 ? (
-              <tr><td colSpan={isReadOnly ? 3 : 4} className="px-8 py-10 text-center text-slate-300 italic font-bold">Data tidak ditemukan.</td></tr>
-            ) : (
-              currentItems.map((wk) => (
-                <tr key={wk.id} className="hover:bg-slate-50 transition-all">
-                  <td className="px-8 py-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600"><ShieldCheck size={22}/></div>
-                      <div>
-                        <p className="leading-tight">{wk.nama_guru}</p>
-                        <p className="text-[10px] text-slate-400 font-bold mt-0.5">NIP: {wk.nip || '-'}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6 text-center">
-                    <span className="bg-slate-900 text-white px-4 py-1.5 rounded-xl text-[11px] border-2 border-slate-800">{wk.rombel}</span>
-                  </td>
-                  <td className="px-8 py-6 text-center text-slate-400 text-xs font-bold">{wk.tahun_ajaran}</td>
-                  {!isReadOnly && (
-                    <td className="px-8 py-6 text-center">
-                      <div className="flex justify-center gap-2">
-                        <button onClick={() => setEditingData(wk)} className="p-2.5 border-2 border-slate-100 text-amber-500 hover:border-amber-500 rounded-xl transition-all bg-white"><Edit3 size={18} /></button>
-                        <button onClick={async () => { if(confirm('Hapus status wali kelas?')) { await fetch(`/api/walikelas?id=${wk.id}`, {method:'DELETE'}); router.refresh(); }}} className="p-2.5 border-2 border-slate-100 text-red-600 hover:border-red-600 rounded-xl transition-all bg-white"><Trash2 size={18} /></button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+          ))
+        )}
+      </tbody>
+    </table>
+  </div> {/* 🔥 TUTUP DIV PEMBUNGKUS */}
+
+  {/* PAGINATION FOOTER */}
+  {/* ... (Kodingan bagian footer ke bawah tetap sama dan di luar div scroll tadi) ... */}
 
         {/* PAGINATION FOOTER */}
         <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -205,9 +229,11 @@ export default function WaliKelasTable({ allGuru, currentWali, isReadOnly = fals
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Rombongan Belajar</label>
-                <select name="rombel" defaultValue={editingData?.rombel} required className="w-full border-2 p-4 rounded-2xl font-black text-slate-900 bg-slate-50 focus:border-blue-500 outline-none">
+                <select name="rombel" defaultValue={editingData?.rombel} required className="w-full border-2 p-4 rounded-2xl font-black text-slate-900 bg-slate-50 focus:border-blue-500 outline-none uppercase text-xs">
                   <option value="">-- PILIH ROMBEL --</option>
-                  {(editingData ? availableRombelEdit : availableRombelTambah).map(r => <option key={r} value={r}>{r}</option>)}
+                  {(editingData ? availableRombelEdit : availableRombelTambah).map(k => (
+                    <option key={k.id} value={k.nama_kelas}>{k.nama_kelas}</option>
+                  ))}
                 </select>
               </div>
               <div className="flex gap-4 pt-6">

@@ -1,3 +1,4 @@
+// app/operator/datawalikelas/page.tsx
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { sql } from '@vercel/postgres';
@@ -7,20 +8,43 @@ import Link from 'next/link';
 
 export default async function WaliKelasPage() {
   const session = await auth();
-  if (!session || (session.user.role !== 'tatausaha' && session.user.role !== 'operator')) {
+  if (!session || session.user.role?.toLowerCase() !== 'operator') {
     redirect('/');
+  }
+
+  // Ambil sekolah_id dari session operator
+  const sId = session.user.sekolah_id || (session.user as any).sekolahId;
+  const sekolahIdInt = sId ? parseInt(sId.toString(), 10) : null;
+
+  if (!sekolahIdInt) {
+    return <div className="p-6 text-center text-rose-600 font-bold">Error: ID Sekolah tidak ditemukan.</div>;
   }
 
   const d = new Date();
   const TAHUN_AKTIF = d.getMonth() + 1 > 6 ? `${d.getFullYear()}/${d.getFullYear() + 1}` : `${d.getFullYear() - 1}/${d.getFullYear()}`;
 
-  // Ambil NIP juga di sini
-  const { rows: allGuru } = await sql`SELECT id, nama, nip FROM guru ORDER BY nama ASC`;
+  // 1. Ambil data guru HANYA yang terdaftar di sekolah ini
+  const { rows: allGuru } = await sql`
+    SELECT id, nama, nip 
+    FROM guru 
+    WHERE sekolah_id = ${sekolahIdInt}  AND jenis ='Guru' AND jenis ='Tenaga Kependidikan' 
+    ORDER BY nama ASC
+  `;
   
+  // 2. Ambil data master nama kelas milik sekolah ini dari database
+  const { rows: allKelas } = await sql`
+    SELECT id, nama_kelas 
+    FROM kelas 
+    WHERE sekolah_id = ${sekolahIdInt}
+    ORDER BY nama_kelas ASC
+  `;
+  
+  // 3. Ambil data wali kelas HANYA yang terdaftar di sekolah ini
   const { rows: currentWali } = await sql`
     SELECT wk.id, g.nama as nama_guru, g.nip, wk.rombel, wk.tahun_ajaran, wk.guru_id 
     FROM wali_kelas wk 
     JOIN guru g ON wk.guru_id = g.id
+    WHERE wk.sekolah_id = ${sekolahIdInt}
     ORDER BY wk.tahun_ajaran DESC, wk.rombel ASC
   `;
 
@@ -51,7 +75,12 @@ export default async function WaliKelasPage() {
         </div>
       </div>
 
-      <WaliKelasTable allGuru={allGuru} currentWali={currentWali} />
+      <WaliKelasTable 
+        allGuru={allGuru} 
+        allKelas={allKelas} 
+        currentWali={currentWali} 
+        sekolahId={sekolahIdInt} 
+      />
     </div>
   );
 }

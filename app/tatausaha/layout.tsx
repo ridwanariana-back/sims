@@ -1,48 +1,74 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { handleLogout } from '@/lib/actions';
+import { handleLogout, getLogoSekolah } from '@/lib/actions';
 import { useSession } from 'next-auth/react';
 
 export default function TatausahaLayout({
-    children,
+  children,
 }: {
-    children: React.ReactNode;
+  children: React.ReactNode;
 }) {
-    const router = useRouter();
-    const { data: session, status } = useSession();
-    const [isOpen, setIsOpen] = useState(false);
-    const [isProfileOpen, setIsProfileOpen] = useState(false);
-    const pathname = usePathname();
+  const router = useRouter();
+  const { data: session, status } = useSession();
+  const [isOpen, setIsOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [logoSekolah, setLogoSekolah] = useState<string>('sekolah.png');
+  const pathname = usePathname();
 
-    // Helper function untuk menentukan class active pada sidebar
-    const getLinkStyle = (path: string) => {
-        const isActive = pathname === path;
-        return `block px-4 py-2 rounded-lg transition-all duration-200 ${
+  useEffect(() => {
+    async function fetchLogo() {
+      const sId = session?.user?.sekolah_id || (session?.user as any)?.sekolahId;
+      if (sId) {
+        const logo = await getLogoSekolah(sId);
+        setLogoSekolah(logo);
+      }
+    }
+    if (status === 'authenticated') {
+      fetchLogo();
+    }
+  }, [session, status]);
+
+  // Helper function untuk menentukan class active pada sidebar
+  const getLinkStyle = (path: string) => {
+    const isActive = pathname === path;
+    return `block px-4 py-2 rounded-lg transition-all duration-200 whitespace-nowrap ${
       isActive 
         ? 'bg-blue-600 text-white shadow-md' 
         : 'text-slate-300 hover:bg-slate-800 hover:text-white'
     }`;
-    };
+  };
 
-    return (
-        <div className="flex min-h-screen bg-gray-100 text-slate-900 relative">
+  return (
+    // 🌟 KUNCI 1: Mengunci tinggi layar penuh agar scrollbar browser tidak bocor
+    <div className="flex h-screen w-screen bg-gray-100 text-slate-900 overflow-hidden relative">
       
-      {/* --- SIDEBAR --- */}
+      {/* --- SIDEBAR (SCROLLABLE & AUTO-CLOSE SUPPORT) --- */}
       <aside className={`
         fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white transform transition-transform duration-300 ease-in-out
+        flex flex-col h-full
         ${isOpen ? 'translate-x-0' : '-translate-x-full'} 
-        md:translate-x-0 md:static md:block
+        md:translate-x-0 md:static md:block flex-shrink-0
       `}>
-        <div className="p-6 flex flex-col items-center border-b border-slate-800">
+        {/* Header Sidebar (Statis di atas) */}
+        <div className="p-6 flex flex-col items-center border-b border-slate-800 flex-shrink-0">
           <div className="flex w-full justify-between items-center md:justify-center">
             <div className="flex items-center gap-2">
-              <div className="relative h-8 w-8">
-                <Image src="/hero.jpg" alt="Logo" fill className="object-contain" />
+              
+              {/* 🌟 LOGO SEKOLAH DINAMIS (Membaca dari folder public/sekolah/) */}
+              <div className="relative h-8 w-8 rounded-md overflow-hidden bg-white flex items-center justify-center p-1">
+                <Image 
+                  src={`/sekolah/${logoSekolah}`} 
+                  alt="Logo Sekolah" 
+                  fill 
+                  className="object-contain"
+                  priority
+                />
               </div>
+              
               <h2 className="text-xl font-bold text-blue-400">SIMS</h2>
             </div>
             <button className="md:hidden text-white text-2xl" onClick={() => setIsOpen(false)}>
@@ -51,21 +77,41 @@ export default function TatausahaLayout({
           </div>
         </div>
 
-        <nav className="mt-6 space-y-2 px-4">
-          <Link href="/tatausaha" className={getLinkStyle('/tatausaha')}>
+        {/* 🌟 KUNCI 2: Navigasi Menu TU dikasih overflow-y-auto agar aman jika menu bertambah panjang */}
+        <nav className="flex-1 mt-6 space-y-2 px-4 pb-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800">
+          <Link href="/tatausaha" onClick={() => setIsOpen(false)} className={getLinkStyle('/tatausaha')}>
             Dashboard
           </Link>
-          <Link href="/tatausaha/dataguru" className={getLinkStyle('/tatausaha/dataguru')}>
+          <Link 
+  href="/tatausaha/profil-sekolah" 
+  onClick={() => setIsOpen(false)} 
+  className={getLinkStyle('/tatausaha/profil-sekolah')}
+>
+  Identitas Sekolah
+</Link>
+          <Link href="/tatausaha/dataguru" onClick={() => setIsOpen(false)} className={getLinkStyle('/tatausaha/dataguru')}>
             Data Guru
           </Link>
-          <Link href="/tatausaha/datamurid" className={getLinkStyle('/tatausaha/datamurid')}>
+          <Link href="/tatausaha/datamurid" onClick={() => setIsOpen(false)} className={getLinkStyle('/tatausaha/datamurid')}>
             Data Murid
           </Link>
-          <Link href="/tatausaha/presensi-guru" className={getLinkStyle('/tatausaha/presensi-guru')}>
+          <Link href="/tatausaha/kelas" onClick={() => setIsOpen(false)} className={getLinkStyle('/tatausaha/kelas')}>
+            Data Kelas
+          </Link>
+          <Link href="/tatausaha/mapel" onClick={() => setIsOpen(false)} className={getLinkStyle('/tatausaha/mapel')}>
+            Data Mapel
+          </Link>
+          <Link href="/tatausaha/presensi-guru" onClick={() => setIsOpen(false)} className={getLinkStyle('/tatausaha/presensi-guru')}>
             Daftar Hadir Guru
           </Link>
-          <Link href="/tatausaha/jadwal-pelajaran" className={getLinkStyle('/tatausaha/jadwal-pelajaran')}>
+          <Link href="/tatausaha/jadwal-pelajaran" onClick={() => setIsOpen(false)} className={getLinkStyle('/tatausaha/jadwal-pelajaran')}>
             Jadwal Pelajaran
+          </Link>
+          <Link href="/tatausaha/prestasi" onClick={() => setIsOpen(false)} className={getLinkStyle('/tatausaha/prestasi')}>
+            Data Prestasi
+          </Link>
+          <Link href="/tatausaha/alumni" onClick={() => setIsOpen(false)} className={getLinkStyle('/tatausaha/alumni')}>
+            Data Alumni
           </Link>
         </nav>
       </aside>
@@ -78,9 +124,11 @@ export default function TatausahaLayout({
         ></div>
       )}
 
-      {/* --- MAIN CONTENT --- */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 z-30 bg-white border-b border-gray-200 px-4 md:px-8 py-4 flex justify-between items-center shadow-sm">
+      {/* --- RIGHT AREA WRAPPER (HEADER + CONTENT) --- */}
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
+        
+        {/* --- HEADER (STAY ON TOP / FIXED) --- */}
+        <header className="bg-white border-b border-gray-200 px-4 md:px-8 py-4 flex justify-between items-center shadow-sm flex-shrink-0">
           <div className="flex items-center gap-4">
             <button 
               className="md:hidden p-2 hover:bg-gray-100 rounded-lg text-2xl"
@@ -107,13 +155,12 @@ export default function TatausahaLayout({
                 <p className="text-sm font-bold leading-none">
                   {status === "loading" ? "Loading..." : session?.user?.name}
                 </p>
-                {/* Menampilkan Role secara dinamis dari session */}
                 <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600 mt-1">
                   Role: {session?.user?.role || "Guest"}
                 </p>
               </div>
 
-              {/* Avatar Dinamis dengan Fallback yang Kuat */}
+              {/* Avatar User */}
               <div className="h-9 w-9 rounded-full relative overflow-hidden border-2 border-white shadow-md bg-blue-600 flex items-center justify-center text-white font-bold">
                 <Image 
                   src={session?.user?.image ? `/profil/${session.user.image}` : "/profil/default.png"} 
@@ -129,7 +176,7 @@ export default function TatausahaLayout({
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setIsProfileOpen(false)}></div>
                 <div className="absolute right-0 mt-3 w-52 bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-20 animate-in fade-in zoom-in duration-150">
-                   <div className="px-4 py-2 border-b border-gray-50 mb-1">
+                  <div className="px-4 py-2 border-b border-gray-50 mb-1">
                     <p className="text-xs text-gray-400">Role Anda</p>
                     <p className="text-sm font-bold truncate text-blue-600 capitalize">
                       {session?.user?.role}
@@ -137,7 +184,10 @@ export default function TatausahaLayout({
                   </div>
                   <Link 
                     href="/tatausaha/profil" 
-                    onClick={() => setIsProfileOpen(false)}
+                    onClick={() => {
+                      setIsProfileOpen(false);
+                      setIsOpen(false);
+                    }}
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                   >
                     Profil Saya
@@ -159,10 +209,14 @@ export default function TatausahaLayout({
           </div>
         </header>
 
-        <main className="p-4 md:p-8 animate-in fade-in duration-500">
-          {children}
+        {/* --- MAIN CONTENT (SCROLLABLE INDEPENDEN) --- */}
+        {/* 🌟 KUNCI 3: Ditambahkan flex-1 overflow-y-auto h-full agar konten halaman bisa di-scroll dengan mulus */}
+        <main className="flex-1 overflow-y-auto h-full p-4 md:p-8 bg-gray-50 scrollbar-thin">
+          <div className="animate-in fade-in duration-500">
+            {children}
+          </div>
         </main>
       </div>
     </div>
-    );
+  );
 }

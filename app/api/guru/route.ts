@@ -1,13 +1,32 @@
+// app/api/guru/route.ts
+
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 
-// 1. GET: Ambil data untuk GuruTable
+// 1. GET: Ambil data untuk GuruTable (Hanya milik sekolah yang sedang login) + Join Nama Mapel
 export async function GET() {
   try {
+    const session = await auth();
+    const sId = session?.user?.sekolah_id || (session?.user as any)?.sekolahId;
+
+    if (!session || !sId) {
+      return NextResponse.json({ error: "Tidak ada otoritas / Sesi habis" }, { status: 401 });
+    }
+
+    const sekolahIdInt = parseInt(sId.toString());
+
+    // 💡 PENYESUAIAN: Melakukan LEFT JOIN untuk mendapatkan nama_mapel asli dari tabel mapel
     const result = await sql`
-      SELECT * FROM guru 
-      ORDER BY nama ASC
+      SELECT 
+        g.*, 
+        m.nama_mapel AS nama_mapel_asli
+      FROM guru g
+      LEFT JOIN mapel m ON CAST(g.mapel AS VARCHAR) = CAST(m.id AS VARCHAR)
+      WHERE g.sekolah_id = ${sekolahIdInt}
+      ORDER BY g.nama ASC
     `;
+    
     return NextResponse.json(result.rows);
   } catch (error) {
     console.error("Database Error:", error);
@@ -15,21 +34,31 @@ export async function GET() {
   }
 }
 
-// 2. POST: Hanya isi data di table guru (Tugas Tata Usaha)
+// 2. POST: Mengisi data di table guru terikat dengan sekolah_id (Tugas Tata Usaha)
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    const sId = session?.user?.sekolah_id || (session?.user as any)?.sekolahId;
+
+    // Proteksi API dari akses luar atau tanpa sekolah_id
+    if (!session || !sId) {
+      return NextResponse.json({ error: "Tidak ada otoritas / Sesi habis" }, { status: 401 });
+    }
+
+    const sekolahIdInt = parseInt(sId.toString());
     const body = await request.json();
     const { 
       nama, nip, nik, nuptk, gender, tgl_lahir, 
       status, jenis, mapel, sekolah_induk 
     } = body;
 
+    // Pastikan sekolah_id ikut disimpan ke dalam database guru baru
     await sql`
       INSERT INTO guru (
-        nama, nip, nik, nuptk, gender, tgl_lahir, 
+        sekolah_id, nama, nip, nik, nuptk, gender, tgl_lahir, 
         status, jenis, mapel, sekolah_induk
       ) VALUES (
-        ${nama}, ${nip}, ${nik}, ${nuptk}, ${gender}, ${tgl_lahir}, 
+        ${sekolahIdInt}, ${nama}, ${nip}, ${nik}, ${nuptk}, ${gender}, ${tgl_lahir}, 
         ${status}, ${jenis}, ${mapel}, ${sekolah_induk}
       )
     `;
@@ -48,36 +77,53 @@ export async function POST(request: Request) {
   }
 }
 
-// 3. DELETE: Hapus Data Fisik + Hapus Akun User (Sync)
+// 3. DELETE: Hapus Data Fisik + Hapus Akun User (Sync & Terkunci sekolah_id)
 export async function DELETE(request: Request) {
   try {
+    const session = await auth();
+    const sId = session?.user?.sekolah_id || (session?.user as any)?.sekolahId;
+
+    if (!session || !sId) {
+      return NextResponse.json({ error: "Tidak ada otoritas / Sesi habis" }, { status: 401 });
+    }
+
+    const sekolahIdInt = parseInt(sId.toString());
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
     if (!id) return NextResponse.json({ error: "ID tidak ditemukan" }, { status: 400 });
 
-    // Langkah A: Ambil NIP guru sebagai referensi username di tabel users
-    const guruRes = await sql`SELECT nip FROM guru WHERE id = ${id}`;
+    // Langkah A: Ambil NIP guru sebagai referensi username, pastikan datanya MEMANG milik sekolah terkait
+    const guruRes = await sql`
+      SELECT nip FROM guru 
+      WHERE id = ${id} AND sekolah_id = ${sekolahIdInt}
+    `;
     const guru = guruRes.rows[0];
 
-    if (guru) {
-      // Gunakan Transaction agar penghapusan sinkron
-      await sql`BEGIN`;
-      
-      // Langkah B: Hapus akun di tabel users yang usernamenya adalah NIP guru tersebut
-      await sql`DELETE FROM users WHERE username = ${guru.nip}`;
-      
-      // Langkah C: Hapus data di tabel guru
-      await sql`DELETE FROM guru WHERE id = ${id}`;
-      
-      await sql`COMMIT`;
+    if (!guru) {
+      return NextResponse.json({ error: "Data guru tidak ditemukan atau bukan hak akses sekolah ini" }, { status: 404 });
     }
+
+    // Jalankan Transaction agar proses hapus bersih berantai tidak terputus di tengah jalan
+    await sql`BEGIN`;
+    
+    // Langkah B: Hapus akun di tabel users yang usernamenya adalah NIP guru tersebut DAN terikat sekolah yang sama
+    await sql`DELETE FROM users WHERE username = ${guru.nip} AND sekolah_id = ${sekolahIdInt}`;
+    
+    // Langkah C: Hapus relasi anak tabel guru lainnya jika sewaktu-waktu dibutuhkan (opsional/antisipasi error foreign key)
+    await sql`DELETE FROM wali_kelas WHERE guru_id = ${id}`;
+    
+    // Langkah D: Hapus data utama di tabel guru
+    await sql`DELETE FROM guru WHERE id = ${id} AND sekolah_id = ${sekolahIdInt}`;
+    
+    await sql`COMMIT`;
 
     return NextResponse.json({ 
       success: true, 
-      message: "Data guru dan akun login terkait berhasil dibersihkan" 
+      message: "Data guru dan akun login terkait berhasil dibersihkan dari sekolah ini" 
     });
   } catch (error) {
+    // Jika ada yang gagal di tengah jalan, kembalikan data ke kondisi semula
     await sql`ROLLBACK`;
     console.error("Delete Error:", error);
     return NextResponse.json({ error: "Gagal menghapus data secara menyeluruh" }, { status: 500 });
