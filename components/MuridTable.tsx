@@ -1,7 +1,6 @@
-// components/MuridTable.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Search, Trash2, Edit, ChevronLeft, ChevronRight, 
   X, Save, Calendar, Fingerprint, BadgeCheck, User2 
@@ -10,7 +9,7 @@ import { useRouter } from "next/navigation";
 
 interface MuridTableProps {
   initialData: any[];
-  masterKelas: any[]; // 🚩 Tambahkan data kelas dari database
+  masterKelas: any[]; // Data kelas dari database
 }
 
 export default function MuridTable({ initialData, masterKelas }: MuridTableProps) {
@@ -23,13 +22,22 @@ export default function MuridTable({ initialData, masterKelas }: MuridTableProps
   const [loading, setLoading] = useState(false);
   const [tempTingkat, setTempTingkat] = useState<string>("");
 
+  // Filter murid berdasarkan nama atau NISN
   const filteredMurid = initialData.filter((m) =>
     m.nama.toLowerCase().includes(searchTerm.toLowerCase()) || 
     m.nisn.includes(searchTerm)
   );
 
-  const totalPages = Math.ceil(filteredMurid.length / rowsPerPage);
-  const currentItems = filteredMurid.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+  // 🌟 LOGIC ENGINE PAGINATION
+  const totalPages = Math.ceil(filteredMurid.length / rowsPerPage) || 1;
+  const indexOfLastItem = currentPage * rowsPerPage;
+  const indexOfFirstItem = indexOfLastItem - rowsPerPage;
+  const currentItems = filteredMurid.slice(indexOfFirstItem, indexOfLastItem);
+
+  // 🌟 PENGAMAN OTOMATIS: Reset ke halaman 1 jika user mengetik sesuatu atau mengubah rows per page
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, rowsPerPage]);
 
   // Ambil daftar tingkat unik dari database
   const daftarTingkatUnik = Array.from(new Set(masterKelas.map((k) => k.tingkat.toString()))).sort((a, b) => Number(a) - Number(b));
@@ -82,7 +90,7 @@ export default function MuridTable({ initialData, masterKelas }: MuridTableProps
         <div className="flex items-center gap-3">
           <select 
             value={rowsPerPage} 
-            onChange={(e) => {setRowsPerPage(Number(e.target.value)); setCurrentPage(1)}} 
+            onChange={(e) => setRowsPerPage(Number(e.target.value))} 
             className="border-2 rounded-xl p-2 text-sm font-black text-slate-900 outline-none bg-white"
           >
             {[10, 20, 50].map((num) => <option key={num} value={num}>Show {num}</option>)}
@@ -98,7 +106,7 @@ export default function MuridTable({ initialData, masterKelas }: MuridTableProps
             placeholder="Cari Nama atau NISN..." 
             className="w-full pl-12 pr-4 py-3 border-2 rounded-2xl outline-none font-black text-slate-900" 
             value={searchTerm} 
-            onChange={(e) => {setSearchTerm(e.target.value); setCurrentPage(1)}} 
+            onChange={(e) => setSearchTerm(e.target.value)} 
           />
         </div>
       </div>
@@ -117,74 +125,110 @@ export default function MuridTable({ initialData, masterKelas }: MuridTableProps
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {currentItems.map((murid) => (
-                <tr key={murid.id} className="hover:bg-slate-50 transition-all">
-                  <td className="px-6 py-6 align-top">
-                    <div className="font-black text-slate-900 text-sm leading-tight uppercase mb-1">{murid.nama}</div>
-                    <div className="flex items-center gap-1 text-[10px] font-black text-slate-400 uppercase">
-                      <User2 size={12} /> {murid.gender}
-                    </div>
+              {currentItems.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-10 text-center font-black text-slate-400 uppercase text-xs">
+                    Data murid tidak ditemukan...
                   </td>
-                  <td className="px-6 py-6 align-top">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-[11px] font-black text-slate-900 uppercase">
-                        <Fingerprint size={14} className="text-blue-500" /> NISN: {murid.nisn}
-                      </div>
-                      <div className="flex items-center gap-2 text-[11px] font-black text-slate-900 uppercase">
-                        <BadgeCheck size={14} className="text-slate-400" /> NIK: {murid.nik || "-"}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-6 align-top text-[11px] font-black uppercase text-slate-900">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-slate-400">IBU:</span> {murid.nama_ibu}
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-500">
-                      <Calendar size={14} /> {new Date(murid.tanggal_lahir).toLocaleDateString('id-ID')}
-                    </div>
-                  </td>
-                  <td className="px-6 py-6 text-center align-top">
-                    <div className="inline-flex flex-col items-center">
-                       <div className="text-[9px] font-black text-slate-900 bg-blue-100 px-2 rounded mb-1 uppercase">Tingkat {murid.kelas}</div>
-                       <div className="bg-slate-900 text-white px-4 py-1.5 rounded-xl text-xs font-black border-2 border-slate-800 uppercase">{murid.rombel}</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-6 text-center align-top">
-  <div className="flex justify-center gap-2">
-    
-    {/* 🎓 KONDISI 1: JIKA MURID SUDAH LULUS / ALUMNI */}
-    {murid.status === 'lulus' ? (
-      <span className="inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-sm whitespace-nowrap">
-        🎓 Telah Lulus (Alumni)
-      </span>
-    ) : (
-      
-      /* ⚡ KONDISI 2: JIKA MURID MASIH AKTIF (KODE BAWAAN) */
-      <>
-        <button 
-          onClick={() => handleEditClick(murid)} 
-          className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-100 transition-all"
-          title="Edit Data Murid"
-        >
-          <Edit size={16} />
-        </button>
-        
-        <button 
-          onClick={() => handleDelete(murid.id)} 
-          className="p-2.5 bg-white border-2 border-slate-100 text-red-600 hover:border-red-600 rounded-xl transition-all"
-          title="Hapus Data Murid"
-        >
-          <Trash2 size={18} />
-        </button>
-      </>
-    )}
-
-  </div>
-</td>
                 </tr>
-              ))}
+              ) : (
+                currentItems.map((murid) => (
+                  <tr key={murid.id} className="hover:bg-slate-50 transition-all">
+                    <td className="px-6 py-6 align-top">
+                      <div className="font-black text-slate-900 text-sm leading-tight uppercase mb-1">{murid.nama}</div>
+                      <div className="flex items-center gap-1 text-[10px] font-black text-slate-400 uppercase">
+                        <User2 size={12} /> {murid.gender}
+                      </div>
+                    </td>
+                    <td className="px-6 py-6 align-top">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-[11px] font-black text-slate-900 uppercase">
+                          <Fingerprint size={14} className="text-blue-500" /> NISN: {murid.nisn}
+                        </div>
+                        <div className="flex items-center gap-2 text-[11px] font-black text-slate-900 uppercase">
+                          <BadgeCheck size={14} className="text-slate-400" /> NIK: {murid.nik || "-"}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-6 align-top text-[11px] font-black uppercase text-slate-900">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-slate-400">IBU:</span> {murid.nama_ibu}
+                      </div>
+                      <div className="flex items-center gap-2 text-slate-500">
+                        <Calendar size={14} /> {new Date(murid.tanggal_lahir).toLocaleDateString('id-ID')}
+                      </div>
+                    </td>
+                    <td className="px-6 py-6 text-center align-top">
+                      <div className="inline-flex flex-col items-center">
+                         <div className="text-[9px] font-black text-slate-900 bg-blue-100 px-2 rounded mb-1 uppercase">Tingkat {murid.kelas}</div>
+                         <div className="bg-slate-900 text-white px-4 py-1.5 rounded-xl text-xs font-black border-2 border-slate-800 uppercase">{murid.rombel}</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-6 text-center align-top">
+                      <div className="flex justify-center gap-2">
+                        {murid.status === 'lulus' ? (
+                          <span className="inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-sm whitespace-nowrap">
+                            🎓 Telah Lulus (Alumni)
+                          </span>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={() => handleEditClick(murid)} 
+                              className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-100 transition-all"
+                              title="Edit Data Murid"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            
+                            <button 
+                              onClick={() => handleDelete(murid.id)} 
+                              className="p-2.5 bg-white border-2 border-slate-100 text-red-600 hover:border-red-600 rounded-xl transition-all"
+                              title="Hapus Data Murid"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
+        </div>
+
+        {/* 🌟 --- KONTROL NAVIGASI PAGINATION (BARU) --- */}
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-5 border-t border-slate-200 bg-slate-50/50 text-sm font-bold text-slate-600">
+          <div className="text-xs uppercase tracking-tight text-slate-500">
+            Menampilkan <span className="text-slate-900 font-black">{filteredMurid.length === 0 ? 0 : indexOfFirstItem + 1}</span> sampai{' '}
+            <span className="text-slate-900 font-black">{indexOfLastItem > filteredMurid.length ? filteredMurid.length : indexOfLastItem}</span> dari{' '}
+            <span className="text-slate-900 font-black">{filteredMurid.length}</span> Siswa Terdaftar
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="p-2.5 border-2 border-slate-200 rounded-xl bg-white text-slate-800 hover:bg-slate-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft size={16} className="stroke-[3]" />
+            </button>
+            
+            <span className="text-xs bg-slate-900 text-white font-black px-4 py-2 rounded-xl tracking-wider">
+              HALAMAN {currentPage} / {totalPages}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="p-2.5 border-2 border-slate-200 rounded-xl bg-white text-slate-800 hover:bg-slate-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronRight size={16} className="stroke-[3]" />
+            </button>
+          </div>
         </div>
       </div>
 

@@ -24,17 +24,20 @@ export default function GuruTable({ initialData, listMapel }: GuruTableProps) {
 
   // Filter pencarian berdasarkan nama, NIP, atau ID mapel yang cocok dengan teks inputan
   const filteredGuru = initialData.filter((guru) => {
-    // Cari nama mapel asli dari listMapel untuk keperluan filtering pencarian text
-    const namaMapelAsli = listMapel.find(
-      (m) => m.id.toString() === guru.mapel?.toString()
-    )?.nama_mapel || "";
+  // Ambil semua nama mapel yang diajar oleh guru ini
+  const namaMapelArray = listMapel
+    .filter((m) => Array.isArray(guru.mapel) && guru.mapel.map(String).includes(m.id.toString()))
+    .map((m) => m.nama_mapel.toLowerCase());
 
-    return (
-      guru.nama.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      guru.nip.includes(searchTerm) ||
-      namaMapelAsli.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  });
+  // Cek apakah salah satu nama mapel mengandung kata kunci pencarian
+  const matchMapel = namaMapelArray.some(nama => nama.includes(searchTerm.toLowerCase()));
+
+  return (
+    guru.nama.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    guru.nip.includes(searchTerm) ||
+    matchMapel
+  );
+});
 
   const totalPages = Math.ceil(filteredGuru.length / rowsPerPage);
   const currentItems = filteredGuru.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
@@ -56,7 +59,21 @@ export default function GuruTable({ initialData, listMapel }: GuruTableProps) {
   const handleUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
+    
     const formData = new FormData(e.currentTarget);
+    
+    // 💡 AMBIL SEMUA MAPEL YANG DICENTANG
+    const selectedMapel = formData.getAll('mapel').map(id => parseInt(id.toString()));
+    
+    // 💡 HAPUS VALUE 'mapel' BAWAAN FORM DATA YANG BERANTAKAN
+    formData.delete('mapel');
+    
+    // 💡 MASUKKAN KEMBALI SEBAGAI STRING ARRAY FORMAT POSTGRESQL (Contoh: {1,2,3})
+    // Ini agar di Server Action nanti nilainya langsung siap masuk ke DB
+    const pgArrayMapel = selectedMapel.length > 0 ? `{${selectedMapel.join(',')}}` : '{}';
+    formData.append('mapel', pgArrayMapel);
+
+    // Kirim formData yang sudah dimodifikasi ke server action
     const res = await updateGuru(editingGuru.id, formData);
     
     if (res.success) {
@@ -148,18 +165,26 @@ export default function GuruTable({ initialData, listMapel }: GuruTableProps) {
                     </div>
                   </td>
 
-                  <td className="px-6 py-6 align-top">
-                    <div className="text-sm font-black text-slate-900 uppercase leading-none">{guru.status}</div>
-                    
-                    {/* 💡 SINKRONISASI TAMPILAN: Cari nama_mapel berdasarkan ID yang tersimpan */}
-                    <div className="text-[11px] text-blue-800 font-black mt-1 leading-tight">
-                      {listMapel.find((m) => m.id.toString() === guru.mapel?.toString())?.nama_mapel || guru.mapel || "Belum Memilih"}
-                    </div>
-
-                    <div className="mt-2 flex items-center gap-1 text-[9px] font-black text-slate-400 uppercase tracking-tighter">
-                       <User2 size={10} /> {guru.gender}
-                    </div>
-                  </td>
+               <td className="px-6 py-6 align-top">
+  <div className="text-sm font-black text-slate-900 uppercase leading-none">{guru.status}</div>
+  
+  <div className="mt-1 flex flex-wrap gap-1 max-w-[200px]">
+    {/* Mengamankan jika g.mapel bernilai null atau array kosong */}
+    {Array.isArray(guru.mapel) && guru.mapel.length > 0 ? (
+      listMapel
+        .filter((m) => guru.mapel.map(String).includes(m.id.toString()))
+        .map((m) => (
+          <span key={m.id} className="inline-block bg-blue-50 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded border border-blue-200">
+            {m.nama_mapel}
+          </span>
+        ))
+    ) : (
+      <span className="text-slate-400 text-[11px] italic font-bold uppercase tracking-wider bg-slate-100 px-2 py-0.5 rounded">
+        Bebas Tugas Mengajar
+      </span>
+    )}
+  </div>
+</td>
 
                   <td className="px-6 py-6 align-top">
                     {guru.wali_kelas_rombel ? (
@@ -274,18 +299,32 @@ export default function GuruTable({ initialData, listMapel }: GuruTableProps) {
                 </div>
               </div>
 
-              {/* 🚩 OPTION VALUE MENGGUNAKAN ID MAPEL */}
-              <div className="space-y-1 md:col-span-2">
-                <label className="text-xs font-black text-slate-500 uppercase">Mata Pelajaran</label>
-                <select name="mapel" defaultValue={editingGuru.mapel} className="w-full border-2 p-3 rounded-xl font-black bg-white text-slate-900">
-                  <option value="">-- Pilih Mata Pelajaran --</option>
-                  {listMapel.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.nama_mapel} ({m.kode_mapel})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* 🚩 MATA PELAJARAN MULTI-SELECT (CHECKBOX LIST UNTUK EDIT) */}
+<div className="space-y-2 md:col-span-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+  <label className="text-[10px] font-black text-slate-500 uppercase block ml-1">
+    Mata Pelajaran Diampu (Bisa Pilih Lebih dari 1)
+  </label>
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 bg-white rounded-xl border">
+    {listMapel.map((m) => {
+      // 💡 Cek apakah id mapel ini ada di dalam array mapel milik guru yang sedang diedit
+      const isChecked = Array.isArray(editingGuru.mapel) && 
+                        editingGuru.mapel.map(String).includes(m.id.toString());
+
+      return (
+        <label key={m.id} className="flex items-center gap-2 cursor-pointer font-bold text-slate-900 text-xs p-1 hover:bg-slate-50 rounded">
+          <input 
+            type="checkbox" 
+            name="mapel" 
+            value={m.id} 
+            defaultChecked={isChecked}
+            className="w-4 h-4 accent-blue-600 rounded"
+          /> 
+          <span>{m.nama_mapel} ({m.kode_mapel})</span>
+        </label>
+      );
+    })}
+  </div>
+</div>
 
               <div className="flex gap-4 pt-4 md:col-span-2">
                 <button type="button" onClick={() => setEditingGuru(null)} className="flex-1 bg-slate-100 py-3 rounded-xl font-black text-slate-600 uppercase">Batal</button>

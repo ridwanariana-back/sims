@@ -15,25 +15,32 @@ export default function AddGuruModal({ listMapel }: AddGuruModalProps) {
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoading(true);
-    const formData = new FormData(e.currentTarget);
-    
-    // Kirim data form ke API route /api/guru
-    const res = await fetch('/api/guru', {
-        method: 'POST',
-        body: JSON.stringify(Object.fromEntries(formData))
-    });
+  e.preventDefault();
+  setLoading(true);
+  const formData = new FormData(e.currentTarget);
+  
+  // Jika tidak ada checkbox yang dicentang, selectedMapel akan otomatis menjadi []
+  const selectedMapel = formData.getAll('mapel').map(id => parseInt(id.toString()));
+  
+  const data = Object.fromEntries(formData);
+  data.mapel = selectedMapel as any; 
 
-    if (res.ok) {
-      router.refresh(); 
-      setIsOpen(false);
-      (e.target as HTMLFormElement).reset();
-    } else {
-      alert("Gagal menyimpan data guru.");
-    }
-    setLoading(false);
-  };
+  const res = await fetch('/api/guru', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+  });
+  
+
+  if (res.ok) {
+    router.refresh(); 
+    setIsOpen(false);
+    (e.target as HTMLFormElement).reset();
+  } else {
+    alert("Gagal menyimpan data guru.");
+  }
+  setLoading(false);
+};
 
   return (
     <>
@@ -116,18 +123,24 @@ export default function AddGuruModal({ listMapel }: AddGuruModalProps) {
                 </select>
               </div>
 
-              {/* 🚩 MATA PELAJARAN DINAMIS DARI DATABASE */}
-<div className="space-y-1 md:col-span-2">
-  <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Mata Pelajaran Diampu</label>
-  <select name="mapel" required className="w-full border-2 p-3 rounded-xl outline-none focus:border-blue-500 bg-white font-black text-xs uppercase text-slate-900">
-    <option value="">-- Pilih Mata Pelajaran --</option>
+              {/* 🚩 MATA PELAJARAN MULTI-SELECT (CHECKBOX LIST) */}
+<div className="space-y-2 md:col-span-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+  <label className="text-[10px] font-black text-slate-500 uppercase block ml-1">
+    Mata Pelajaran Diampu (Bisa Pilih Lebih dari 1)
+  </label>
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 bg-white rounded-xl border">
     {listMapel.map((m) => (
-      /* 💡 VALUE DIUBAH MENJADI ID MAPEL */
-      <option key={m.id} value={m.id}>
-        {m.nama_mapel} ({m.kode_mapel})
-      </option>
+      <label key={m.id} className="flex items-center gap-2 cursor-pointer font-bold text-slate-900 text-xs p-1 hover:bg-slate-50 rounded">
+        <input 
+          type="checkbox" 
+          name="mapel" 
+          value={m.id} 
+          className="w-4 h-4 accent-blue-600 rounded"
+        /> 
+        <span>{m.nama_mapel} ({m.kode_mapel})</span>
+      </label>
     ))}
-  </select>
+  </div>
 </div>
 
               {/* SEKOLAH INDUK */}

@@ -10,7 +10,7 @@ declare module 'next-auth' {
       id: string;
       role: string;
       username: string;
-      sekolah_id?: number;
+      sekolah_id?: number | null; // Diperbarui agar aman menerima nilai 0 atau null untuk superadmin
       isWaliKelas: boolean;
       kelasWali: string | null;
       tahunAjaran: string | null;
@@ -53,8 +53,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
-      const role = auth?.user?.role?.toLowerCase(); 
+      const role = auth?.user?.role?.toLowerCase().replace('_', ''); // .replace('_', '') untuk antisipasi jika ada penulisan 'tata_usaha' di DB agar seragam jadi 'tatausaha'
       
+      // Jalur Proteksi Halaman Dashboard
+      const isSuperadminPage = nextUrl.pathname.startsWith('/superadmin'); // 🌟 Tambahan Rute Guard Superadmin
       const isGuruPage = nextUrl.pathname.startsWith('/guru');
       const isOperatorPage = nextUrl.pathname.startsWith('/operator');
       const isTUPage = nextUrl.pathname.startsWith('/tatausaha'); 
@@ -62,17 +64,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const isKurikulumPage = nextUrl.pathname.startsWith('/wakilkurikulum');
       const isKesiswaanPage = nextUrl.pathname.startsWith('/wakilkesiswaan');
       
+      // Validasi Hak Akses Masuk Menu
+      if (isSuperadminPage && (!isLoggedIn || role !== 'superadmin')) return false; // 🌟 Kunci halaman superadmin
       if (isGuruPage && (!isLoggedIn || role !== 'guru')) return false;
       if (isOperatorPage && (!isLoggedIn || role !== 'operator')) return false;
-      if (isTUPage && (!isLoggedIn || role !== 'tata_usaha')) return false; 
+      if (isTUPage && (!isLoggedIn || role !== 'tatausaha')) return false; 
       if (isKepalaPage && (!isLoggedIn || role !== 'kepalasekolah')) return false;
       if (isKurikulumPage && (!isLoggedIn || role !== 'wakilkurikulum')) return false;
       if (isKesiswaanPage && (!isLoggedIn || role !== 'wakilkesiswaan')) return false;
       
+      // Pengalihan Otomatis ke Dashboard Masing-Masing Jika Mengakses Halaman Landing Utama ("/")
       if (isLoggedIn && nextUrl.pathname === '/') {
         let destination = '/';
-        if (role === 'operator') destination = '/operator';
-        else if (role === 'tata_usaha') destination = '/tatausaha'; 
+        if (role === 'superadmin') destination = '/superadmin'; // 🌟 Redirect otomatis superadmin
+        else if (role === 'operator') destination = '/operator';
+        else if (role === 'tatausaha') destination = '/tatausaha'; 
         else if (role === 'guru') destination = '/guru';
         else if (role === 'kepalasekolah') destination = '/kepalasekolah';
         else if (role === 'wakilkurikulum') destination = '/wakilkurikulum';
@@ -92,8 +98,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.name = user.name as string;
         token.picture = user.image as string;
         
-        const rawSekolahId = (user as any).sekolah_id || (user as any).sekolahId;
-        token.sekolah_id = rawSekolahId ? parseInt(rawSekolahId.toString()) : null;
+        const rawSekolahId = (user as any).sekolah_id !== undefined ? (user as any).sekolah_id : (user as any).sekolahId;
+        // Gunakan pengecekan presisi agar jika sekolah_id bernilai 0 (Superadmin) tetap terbaca angka 0, bukan dianggap null/false.
+        token.sekolah_id = (rawSekolahId !== null && rawSekolahId !== undefined) ? parseInt(rawSekolahId.toString()) : null;
 
         if (user.role?.toLowerCase() === 'guru' && user.username) {
           try {
@@ -127,7 +134,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
 
-      // 🔥 PERBAIKAN UTAMA: Ambil langsung dari root session object yang dikirim client
       if (trigger === "update" && session) {
         if (session.name) token.name = session.name;
         if (session.image) token.picture = session.image;
@@ -142,10 +148,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = token.role as string;
         session.user.username = token.username as string;
         session.user.name = token.name as string;
-        session.user.image = token.picture as string; // Menjaga gambar tetap update di client-side
+        session.user.image = token.picture as string; 
         
-        const tokenSekolahId = token.sekolah_id || (token as any).sekolahId;
-        session.user.sekolah_id = tokenSekolahId ? parseInt(tokenSekolahId.toString()) : undefined;
+        const tokenSekolahId = token.sekolah_id !== undefined ? token.sekolah_id : (token as any).sekolahId;
+        session.user.sekolah_id = (tokenSekolahId !== null && tokenSekolahId !== undefined) ? parseInt(tokenSekolahId.toString()) : null;
         
         session.user.isWaliKelas = !!token.isWaliKelas;
         session.user.kelasWali = (token.kelasWali as string) || null;

@@ -1,3 +1,4 @@
+// app/tatausaha/jadwal-pelajaran/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -9,7 +10,7 @@ import {
   getTahunAjaranDinamis, 
   getDaftarGuru, 
   getDaftarKelas, 
-  getDaftarMapel 
+  getDaftarMapel1 
 } from "@/lib/actions";
 
 const DAFTAR_HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
@@ -33,7 +34,7 @@ export default function BuatJadwalPage() {
     getTahunAjaranDinamis().then(setTahunAjaran);
     getDaftarGuru(sekolahIdInt).then(setAllGurus);
     getDaftarKelas(sekolahIdInt).then(setAllKelas);
-    getDaftarMapel(sekolahIdInt).then(setAllMapel);
+    getDaftarMapel1(sekolahIdInt).then(setAllMapel);
   }, [sekolahIdInt]);
 
   const daftarTingkatUnik = Array.from(new Set(allKelas.map(k => k.tingkat.toString()))).sort();
@@ -60,17 +61,19 @@ export default function BuatJadwalPage() {
         }
 
         if (field === "mapel") {
-          // 💡 SINKRONISASI ID: Cari mapel berdasarkan ID mapel yang dipilih
-          const selectedMapelObj = allMapel.find(m => m.id.toString() === value.toString());
-          
-          if (selectedMapelObj?.kelompok === "Kegiatan") {
-            updatedForm.guru_id = "";
-          } else {
-            // 💡 SINKRONISASI ID: Cari guru yang string mapel-nya cocok dengan ID mapel ini
-            const guruCocok = allGurus.find(g => g.mapel?.toString() === value.toString());
-            updatedForm.guru_id = guruCocok ? guruCocok.id.toString() : "";
-          }
-        }
+  // 💡 SINKRONISASI ID: Cari mapel berdasarkan ID mapel yang dipilih
+  const selectedMapelObj = allMapel.find(m => m.id.toString() === value.toString());
+  
+  if (selectedMapelObj?.kelompok === "Kegiatan") {
+    updatedForm.guru_id = "";
+  } else {
+    // 💡 PENYESUAIAN MULTI-MAPEL: Cari guru pertama yang array mapel-nya mengandung id mapel ini
+    const guruCocok = allGurus.find(g => 
+      Array.isArray(g.mapel) && g.mapel.map(String).includes(value.toString())
+    );
+    updatedForm.guru_id = guruCocok ? guruCocok.id.toString() : "";
+  }
+}
         
         return updatedForm;
       }
@@ -141,9 +144,11 @@ export default function BuatJadwalPage() {
         {forms.map((form) => {
           const rombelTersedia = allKelas.filter(k => k.tingkat.toString() === form.kelas);
           
-          // 💡 SINKRONISASI ID: Filter guru pengampu berdasarkan ID Mapel yang dipilih
-          const filteredGurus = allGurus.filter(g => g.mapel?.toString() === form.mapel?.toString());
-          
+          // 💡 PENYESUAIAN MULTI-MAPEL: Filter semua guru yang mengampu mapel ini
+          const filteredGurus = allGurus.filter(g => 
+            Array.isArray(g.mapel) && g.mapel.map(String).includes(form.mapel?.toString())
+          );
+
           // 💡 SINKRONISASI ID: Cek kategori mapel berdasarkan ID
           const isKegiatan = allMapel.find(m => m.id.toString() === form.mapel?.toString())?.kelompok === "Kegiatan";
 
@@ -188,7 +193,7 @@ export default function BuatJadwalPage() {
                     <option value="">Pilih Mapel / Kegiatan</option>
                     <optgroup label="MATA PELAJARAN">
                       {allMapel.filter(m => m.kelompok !== 'Kegiatan').map(m => (
-                        <option key={m.id} value={m.id}>{m.nama_mapel} ({m.kelompok})</option>
+                        <option key={m.id} value={m.id}>{m.nama_mapel} ({m.kelompok} | Kode : {m.kode_mapel})</option>
                       ))}
                     </optgroup>
                     <optgroup label="KEGIATAN SEKOLAH">

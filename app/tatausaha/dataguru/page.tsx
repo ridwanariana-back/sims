@@ -31,7 +31,7 @@ export default async function GuruPage() {
       SELECT id, nama_mapel, kode_mapel 
       FROM mapel 
       WHERE sekolah_id = ${sekolahIdInt} AND Kelompok != 'Kegiatan'
-      ORDER BY nama_mapel ASC
+      ORDER BY kode_mapel ASC
     `
   ]);
 

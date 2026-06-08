@@ -279,10 +279,25 @@ export async function getDaftarKelas(sekolahId: number) {
 export async function getDaftarMapel(sekolahId: number) {
   try {
     const res = await sql`
-      SELECT id, nama_mapel, kelompok 
+      SELECT id, nama_mapel, kelompok, kode_mapel 
       FROM mapel 
       WHERE sekolah_id = ${sekolahId}
       ORDER BY kelompok ASC, nama_mapel ASC
+    `;
+    return res.rows;
+  } catch (error) {
+    console.error("Gagal ambil daftar mapel:", error);
+    return [];
+  }
+}
+
+export async function getDaftarMapel1(sekolahId: number) {
+  try {
+    const res = await sql`
+      SELECT id, nama_mapel, kelompok, kode_mapel 
+      FROM mapel 
+      WHERE sekolah_id = ${sekolahId}
+      ORDER BY kode_mapel ASC
     `;
     return res.rows;
   } catch (error) {
@@ -769,6 +784,174 @@ export async function updateProfilSekolah(formData: FormData, sekolahId: number 
   }
 }
 
+
+// 1. Ambil Semua Daftar Sekolah untuk Tabel Utama
+export async function getAllSekolah() {
+  try {
+    const { rows } = await sql`
+      SELECT s.*, 
+             (SELECT COUNT(*) FROM public.users WHERE sekolah_id = s.id) as total_users,
+             (SELECT COUNT(*) FROM public.murid WHERE sekolah_id = s.id) as total_murid
+      FROM public.sekolah s
+      ORDER BY s.created_at DESC
+    `;
+    return rows;
+  } catch (error) {
+    console.error("Gagal mengambil daftar sekolah global:", error);
+    return [];
+  }
+}
+
+// 2. Tambah Sekolah Baru & Buatkan Otomatis Akun Tata Usaha Utama
+
+export async function createSekolahBaru(formData: FormData) {
+  const namaSekolah = formData.get('nama_sekolah') as string;
+  const npsn = formData.get('npsn') as string;
+  const alamat = formData.get('alamat') as string;
+
+  if (!namaSekolah || !npsn || !alamat) {
+    return { success: false, message: 'Semua kolom formulir wajib diisi!' };
+  }
+
+  try {
+    // 1. Cek duplikasi NPSN
+    const { rows: cekNpsn } = await sql`
+      SELECT id FROM public.sekolah WHERE npsn = ${npsn.trim()}
+    `;
+    
+    if (cekNpsn.length > 0) {
+      return { success: false, message: 'Gagal! NPSN Sekolah tersebut sudah terdaftar di sistem.' };
+    }
+
+    // 2. Insert Data Lembaga Sekolah Baru
+    const { rows: sekolahBaru } = await sql`
+      INSERT INTO public.sekolah (nama_sekolah, npsn, alamat, gambar)
+      VALUES (${namaSekolah.trim()}, ${npsn.trim()}, ${alamat.trim()}, 'sekolah.png')
+      RETURNING id
+    `;
+    const sekolahId = sekolahBaru[0].id;
+
+    // 3. 🌟 LOGIC ENGINE AUTO-GENERATE USERNAME
+    const slugSekolah = namaSekolah
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+
+    const usernameTU = `tu_${slugSekolah}`;
+    const usernameOps = `ops_${slugSekolah}`;
+
+    // 4. Hash password (menggunakan username sebagai default password awal)
+    const passwordTUHashed = await bcrypt.hash(usernameTU, 10);
+    const passwordOpsHashed = await bcrypt.hash(usernameOps, 10);
+
+    // 5. Inject Akun Default Tata Usaha ke Database
+    await sql`
+      INSERT INTO public.users (sekolah_id, username, password, role, name)
+      VALUES (${sekolahId}, ${usernameTU}, ${passwordTUHashed}, 'TATA_USAHA', ${`TU Default ${namaSekolah}`})
+    `;
+
+    // 6. Inject Akun Default Operator ke Database
+    await sql`
+      INSERT INTO public.users (sekolah_id, username, password, role, name)
+      VALUES (${sekolahId}, ${usernameOps}, ${passwordOpsHashed}, 'OPERATOR', ${`Operator Default ${namaSekolah}`})
+    `;
+
+    // Kembalikan objek data agar bisa dibaca oleh modal pop-up sukses di UI client-side
+    return {
+      success: true,
+      message: 'Sekolah sukses didaftarkan dengan akun ter-generate otomatis!',
+      data: {
+        namaSekolah,
+        usernameTU,
+        usernameOps
+      }
+    };
+
+  } catch (error: any) {
+    console.error('Error saat membuat sekolah baru dari superadmin:', error);
+    return { 
+      success: false, 
+      message: error.message || 'Terjadi kesalahan internal sistem.' 
+    };
+  }
+}
+
+// 3. Edit Informasi Dasar Sekolah
+export async function updateSekolah(formData: FormData, id: number) {
+  try {
+    const namaSekolah = formData.get("nama_sekolah") as string;
+    const npsn = formData.get("npsn") as string;
+    const alamat = formData.get("alamat") as string;
+
+    const cekNpsn = await sql`SELECT id FROM public.sekolah WHERE npsn = ${npsn.trim()} AND id != ${id}`;
+    if (cekNpsn.rows.length > 0) {
+      return { success: false, message: "Gagal! NPSN ini sudah dipakai sekolah lain." };
+    }
+
+    await sql`
+      UPDATE public.sekolah
+      SET nama_sekolah = ${namaSekolah.trim()}, npsn = ${npsn.trim()}, alamat = ${alamat.trim()}
+      WHERE id = ${id}
+    `;
+
+    revalidatePath("/superadmin");
+    return { success: true, message: "Profil sekolah berhasil diperbarui!" };
+  } catch (error: any) {
+    return { success: false, message: error.message || "Gagal memperbarui data." };
+  }
+}
+
+// 4. 🔥 Fitur Sapu Bersih: Hapus Sekolah & Seluruh Data Terkait (Cascading Manual)
+export async function deleteSekolahTotal(sekolahId: number) {
+  try {
+    await sql`BEGIN`;
+
+    // Ambil semua id murid dan guru di sekolah ini untuk membersihkan tabel jembatan yang tidak mengikat sekolah_id langsung
+    const muridIds = (await sql`SELECT id FROM public.murid WHERE sekolah_id = ${sekolahId}`).rows.map(r => r.id);
+    const guruIds = (await sql`SELECT id FROM public.guru WHERE sekolah_id = ${sekolahId}`).rows.map(r => r.id);
+
+    // Hapus data transaksional anak murid jika id murid terdeteksi
+    if (muridIds.length > 0) {
+      await sql`DELETE FROM public.alumni WHERE murid_id = ANY(${muridIds as any})`;
+      await sql`DELETE FROM public.kehadiran WHERE murid_id = ANY(${muridIds as any})`;
+      await sql`DELETE FROM public.nilai WHERE murid_id = ANY(${muridIds as any})`;
+      await sql`DELETE FROM public.catatan_kedisiplinan WHERE murid_id = ANY(${muridIds as any})`;
+      await sql`DELETE FROM public.history_perwalian WHERE murid_id = ANY(${muridIds as any})`;
+    }
+
+    // Hapus data transaksional guru jika id guru terdeteksi
+    if (guruIds.length > 0) {
+      await sql`DELETE FROM public.kehadiran_guru WHERE guru_id = ANY(${guruIds as any})`;
+      await sql`DELETE FROM public.wali_kelas WHERE guru_id = ANY(${guruIds as any})`;
+    }
+
+    // Hapus data berdasarkan sekolah_id langsung sesuai relasi skema
+    await sql`DELETE FROM public.history_perwalian WHERE sekolah_id = ${sekolahId}`;
+    await sql`DELETE FROM public.catatan_kedisiplinan WHERE sekolah_id = ${sekolahId}`;
+    await sql`DELETE FROM public.kehadiran WHERE sekolah_id = ${sekolahId}`;
+    await sql`DELETE FROM public.kehadiran_guru WHERE sekolah_id = ${sekolahId}`;
+    await sql`DELETE FROM public.jadwal_pelajaran WHERE sekolah_id = ${sekolahId}`;
+    await sql`DELETE FROM public.nilai WHERE sekolah_id = ${sekolahId}`;
+    await sql`DELETE FROM public.prestasi WHERE sekolah_id = ${sekolahId}`;
+    await sql`DELETE FROM public.kelas WHERE sekolah_id = ${sekolahId}`;
+    await sql`DELETE FROM public.mapel WHERE sekolah_id = ${sekolahId}`;
+    await sql`DELETE FROM public.alumni WHERE sekolah_id = ${sekolahId}`;
+    await sql`DELETE FROM public.wali_kelas WHERE sekolah_id = ${sekolahId}`;
+    await sql`DELETE FROM public.users WHERE sekolah_id = ${sekolahId}`;
+    await sql`DELETE FROM public.murid WHERE sekolah_id = ${sekolahId}`;
+    await sql`DELETE FROM public.guru WHERE sekolah_id = ${sekolahId}`;
+
+    // Terakhir, hapus entitas utama sekolahnya
+    await sql`DELETE FROM public.sekolah WHERE id = ${sekolahId}`;
+
+    await sql`COMMIT`;
+    revalidatePath("/superadmin");
+    return { success: true, message: "Sekolah dan seluruh data turunannya berhasil dihapus permanen!" };
+  } catch (error: any) {
+    await sql`ROLLBACK`;
+    console.error("Gagal menghapus total data sekolah:", error);
+    return { success: false, message: "Gagal menghapus: " + error.message };
+  }
+}
 // -- revisi function yang dibawah --
 // actions.ts
 // Tambahkan async di sini
@@ -874,6 +1057,80 @@ export async function updateProfile(formData: FormData) {
   }
 }
 
+export async function updateProfile1(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Sesi tidak valid." };
+
+  // Ambil data sekolah_id dari session untuk guardrail ekstra
+  
+  const name = formData.get('name') as string;
+  const imageFile = formData.get('image') as File;
+
+  if (imageFile && imageFile.size > 2 * 1024 * 1024) {
+    return { error: "File terlalu besar. Maksimal 2MB." };
+  }
+
+  // 1. Ambil data lama dengan filter user id DAN sekolah_id (Guardrail)
+  const userQuery = await sql`
+    SELECT image FROM users 
+    WHERE id = ${session.user.id} 
+      
+  `;
+  
+  if (userQuery.rows.length === 0) return { error: "User tidak ditemukan." };
+  
+  const oldImageName = userQuery.rows[0].image || "default.png";
+  const userRole = session.user.role?.toLowerCase(); // normalisasi huruf kecil
+  
+  // Perbaikan jalur revalidate: sesuaikan dengan struktur folder dashboard tatausaha kamu
+  const profilePath = `/tatausaha/profil`; 
+
+  let newImageName = oldImageName;
+
+  try {
+    // 2. Jika ada file baru yang diunggah
+    if (imageFile && imageFile.size > 0) {
+      newImageName = `${Date.now()}-${imageFile.name.replaceAll(" ", "_")}`;
+      const newFilePath = path.join(process.cwd(), "public/profil", newImageName);
+
+      const bytes = await imageFile.arrayBuffer();
+      await fs.writeFile(newFilePath, Buffer.from(bytes));
+
+      // 3. Hapus foto lama JIKA bukan 'default.png'
+      if (oldImageName !== "default.png") {
+        const oldFilePath = path.join(process.cwd(), "public/profil", oldImageName);
+        try {
+          await fs.access(oldFilePath);
+          await fs.unlink(oldFilePath);
+        } catch (err) {
+          console.error("File lama tidak ditemukan atau gagal dihapus:", err);
+        }
+      }
+    }
+
+    // 4. Update Database dengan pengaman sekolah_id
+    await sql`
+      UPDATE users 
+      SET name = ${name}, image = ${newImageName} 
+      WHERE id = ${session.user.id}
+        
+    `;
+
+    // Revalidate data halaman agar langsung segar tanpa reload total
+    revalidatePath(profilePath);
+    revalidatePath(`/tatausaha`, 'layout');
+
+    return {
+      success: true,
+      message: "Profil berhasil diperbarui!",
+      image: newImageName
+    };
+  } catch (error) {
+    console.error("Update Error:", error);
+    return { error: "Gagal memperbarui profil." };
+  }
+}
+
 // --- Action Ganti Password ---
 export async function changePassword(formData: FormData) {
   const session = await auth();
@@ -915,6 +1172,51 @@ export async function changePassword(formData: FormData) {
       SET password = ${hashedNewPassword} 
       WHERE id = ${session.user.id} 
         AND sekolah_id = ${sekolahId}
+    `;
+
+    return { success: "Password berhasil diganti!" };
+  } catch (error) {
+    console.error("Change Password Error:", error);
+    return { error: "Terjadi kesalahan sistem." };
+  }
+}
+
+export async function changePassword1(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Tidak diizinkan." };
+
+  // Ambil sekolah_id dari session untuk guardrail ekstra
+  
+  const oldPassword = formData.get('oldPassword') as string;
+  const newPassword = formData.get('newPassword') as string;
+  const confirmPassword = formData.get('confirmPassword') as string;
+
+  if (newPassword !== confirmPassword) return { error: "Konfirmasi password tidak cocok." };
+
+  try {
+    // 1. Ambil password lama dengan filter ID dan Sekolah (Guardrail)
+    const userQuery = await sql`
+      SELECT password FROM users 
+      WHERE id = ${session.user.id} 
+        
+    `;
+    
+    if (userQuery.rows.length === 0) return { error: "Pengguna tidak ditemukan." };
+    
+    const user = userQuery.rows[0];
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+
+    if (!isMatch) return { error: "Password lama salah." };
+
+    // 2. Hash password baru
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    
+    // 3. Update database dengan filter ID dan Sekolah (Guardrail)
+    await sql`
+      UPDATE users 
+      SET password = ${hashedNewPassword} 
+      WHERE id = ${session.user.id} 
+        
     `;
 
     return { success: "Password berhasil diganti!" };

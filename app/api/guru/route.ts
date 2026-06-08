@@ -4,7 +4,7 @@ import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 
-// 1. GET: Ambil data untuk GuruTable (Hanya milik sekolah yang sedang login) + Join Nama Mapel
+// 1. GET: Ambil data untuk GuruTable (Hanya milik sekolah yang sedang login) + Join Nama Mapel (Format Array)
 export async function GET() {
   try {
     const session = await auth();
@@ -16,13 +16,18 @@ export async function GET() {
 
     const sekolahIdInt = parseInt(sId.toString());
 
-    // 💡 PENYESUAIAN: Melakukan LEFT JOIN untuk mendapatkan nama_mapel asli dari tabel mapel
+    // 💡 PENYESUAIAN: Menggunakan subquery ANY untuk mencocokkan ID di dalam array
+    // m.id = ANY(g.mapel) artinya mencari semua id mapel yang ada di dalam list array guru.mapel
+    // string_agg digunakan untuk menyatukan nama mapel menjadi satu string dipisahkan oleh koma (contoh: "Matematika, Fisika")
     const result = await sql`
       SELECT 
         g.*, 
-        m.nama_mapel AS nama_mapel_asli
+        (
+          SELECT string_agg(m.nama_mapel, ', ') 
+          FROM mapel m 
+          WHERE m.id = ANY(g.mapel)
+        ) AS nama_mapel_asli
       FROM guru g
-      LEFT JOIN mapel m ON CAST(g.mapel AS VARCHAR) = CAST(m.id AS VARCHAR)
       WHERE g.sekolah_id = ${sekolahIdInt}
       ORDER BY g.nama ASC
     `;
@@ -34,34 +39,38 @@ export async function GET() {
   }
 }
 
-// 2. POST: Mengisi data di table guru terikat dengan sekolah_id (Tugas Tata Usaha)
+// 2. POST: Mengisi data di table guru
 export async function POST(request: Request) {
   try {
     const session = await auth();
     const sId = session?.user?.sekolah_id || (session?.user as any)?.sekolahId;
 
-    // Proteksi API dari akses luar atau tanpa sekolah_id
     if (!session || !sId) {
       return NextResponse.json({ error: "Tidak ada otoritas / Sesi habis" }, { status: 401 });
     }
 
     const sekolahIdInt = parseInt(sId.toString());
     const body = await request.json();
-    const { 
-      nama, nip, nik, nuptk, gender, tgl_lahir, 
-      status, jenis, mapel, sekolah_induk 
-    } = body;
+    // Ambil variabel mapel dari body request
+const { 
+  nama, nip, nik, nuptk, gender, tgl_lahir, 
+  status, jenis, mapel, sekolah_induk 
+} = body;
 
-    // Pastikan sekolah_id ikut disimpan ke dalam database guru baru
-    await sql`
-      INSERT INTO guru (
-        sekolah_id, nama, nip, nik, nuptk, gender, tgl_lahir, 
-        status, jenis, mapel, sekolah_induk
-      ) VALUES (
-        ${sekolahIdInt}, ${nama}, ${nip}, ${nik}, ${nuptk}, ${gender}, ${tgl_lahir}, 
-        ${status}, ${jenis}, ${mapel}, ${sekolah_induk}
-      )
-    `;
+// 💡 VALIDASI: Jika mapel kosong/null/tidak diisi, buat jadi string array kosong '{}'
+const pgArrayMapel = Array.isArray(mapel) && mapel.length > 0 
+  ? `{${mapel.join(',')}}` 
+  : '{}';
+
+await sql`
+  INSERT INTO guru (
+    sekolah_id, nama, nip, nik, nuptk, gender, tgl_lahir, 
+    status, jenis, mapel, sekolah_induk
+  ) VALUES (
+    ${sekolahIdInt}, ${nama}, ${nip}, ${nik}, ${nuptk}, ${gender}, ${tgl_lahir}, 
+    ${status}, ${jenis}, ${pgArrayMapel}, ${sekolah_induk}
+  )
+`;
 
     return NextResponse.json({ 
       success: true, 
