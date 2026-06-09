@@ -3125,12 +3125,22 @@ export async function getKurikulumStats() {
 
 
     // --- 7. BEBAN MENGAJAR & KINERJA GURU ---
-  const kinerjaGuruRes = await sql`
+    const kinerjaGuruRes = await sql`
       SELECT 
         g.id as guru_id,
         g.nama as guru_nama,
-        g.nip as guru_nip, -- 🌟 Ambil dengan alias yang sangat jelas
-        COALESCE(m.nama_mapel, 'Umum') as nama_mapel,
+        g.nip as guru_nip,
+        -- Menggabungkan nama-nama mapel jika guru mengajar lebih dari satu mapel
+        COALESCE(
+          (
+            SELECT STRING_AGG(m.nama_mapel, ', ') 
+            FROM mapel m 
+            WHERE CAST(m.id AS VARCHAR) = ANY(
+              REGEXP_SPLIT_TO_ARRAY(REGEXP_REPLACE(CAST(g.mapel AS VARCHAR), '[\[\]\s]', '', 'g'), ',')
+            )
+          ), 
+          'Umum'
+        ) as nama_mapel,
         -- 1. Hitung total jam pelajaran (JPM) murni tanpa dikali 2
         (SELECT COUNT(jp.id) FROM jadwal_pelajaran jp WHERE jp.guru_id = g.id) as total_jam,
         -- 2. Persentase kehadiran guru (jika belum ada data absen, set ke 0%)
@@ -3140,16 +3150,16 @@ export async function getKurikulumStats() {
             NULLIF(COUNT(kg.id), 0), 1
           ), 0
         ) as persen_kehadiran,
-        -- 3. Cek kelengkapan input nilai
+        -- 3. Cek kelengkapan input nilai (Sudah difix menggunakan END)
         CASE 
           WHEN (SELECT COUNT(n.id) FROM nilai n WHERE n.guru_id = g.id) > 0 THEN 'Lengkap'
           ELSE 'Belum Lengkap'
-        END as status_nilai
+        -- Tadi di bawah ini Gemgem nulisnya malah tanda kurung ")", yang betul adalah "END"
+        END as status_nilai 
       FROM guru g
-      LEFT JOIN mapel m ON g.mapel = CAST(m.id AS VARCHAR)
       LEFT JOIN kehadiran_guru kg ON g.id = kg.guru_id
       WHERE g.jenis != 'Kepala Sekolah'
-      GROUP BY g.id, g.nama, g.nip, m.nama_mapel -- 🌟 Group by dipastikan aman
+      GROUP BY g.id, g.nama, g.nip, g.mapel
       ORDER BY total_jam DESC
     `;
 
@@ -3175,7 +3185,8 @@ export async function getKurikulumStats() {
           semester,
           AVG(NULLIF(nilai_angka, 0)::float) as avg_nilai
         FROM nilai
-        WHERE mapel = '6'
+        -- Menggunakan LIKE untuk mendeteksi ID mapel '6' di dalam array string/teks
+        WHERE CAST(mapel AS VARCHAR) LIKE '%6%'
         GROUP BY semester
       ),
       ganjil AS (SELECT avg_nilai FROM nilai_semester WHERE semester = 'Ganjil'),

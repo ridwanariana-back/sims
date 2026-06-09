@@ -1,3 +1,4 @@
+// components/kurikulumdashboardclient.tsx
 "use client";
 
 import { useState, useEffect } from "react";

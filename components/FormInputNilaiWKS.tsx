@@ -1,3 +1,4 @@
+// components/forminputnilai.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -154,9 +155,12 @@ export default function FormInputNilai({
         </div>
 
         <div className="flex flex-col md:flex-row gap-4 pt-4">
-          <Link href="/wakilkesiswaan/inputnilai" className="flex-1 flex items-center justify-center gap-2 py-3.5 border-2 border-slate-100 rounded-xl font-bold hover:bg-slate-50 text-slate-600 transition-all text-sm">
-            <ArrowLeft size={18} /> KEMBALI
-          </Link>
+         <Link 
+  href={`/wakilkesiswaan/inputnilai?mapel=${mapelDefault}`} 
+  className="flex-1 flex items-center justify-center gap-2 py-3.5 border-2 border-slate-100 rounded-xl font-bold hover:bg-slate-50 text-slate-600 transition-all text-sm"
+>
+  <ArrowLeft size={18} /> KEMBALI
+</Link>
           
           {dataLama?.id && (
             <button

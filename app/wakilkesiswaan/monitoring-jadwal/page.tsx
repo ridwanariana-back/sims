@@ -1,4 +1,3 @@
-// app/kepalasekolah/monitoring-jadwal/page.tsx
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { sql } from "@vercel/postgres";
@@ -17,25 +16,31 @@ export default async function MonitoringJadwalPage() {
   const sekolahIdInt = sId ? parseInt(sId.toString(), 10) : null;
 
   try {
-    // 2. Ambil data master guru beserta akumulasi beban mengajar mingguan (JP)
+    // 2. Ambil data master guru beserta akumulasi beban mengajar mingguan (JP) & Fix Multi-Mapel Array
     const guruRes = await sql`
       SELECT 
         g.id,
         g.nama,
         g.nip,
         g.status,
-        COALESCE(m_master.nama_mapel, 'Belum Ditentukan') as mapel_utama,
+        -- 💡 FIX MULTI-MAPEL ARRAY: Ambil semua nama mapel berdasarkan array g.mapel
+        COALESCE(
+          (
+            SELECT string_agg(m.nama_mapel, ', ')
+            FROM mapel m
+            WHERE m.id = ANY(g.mapel)
+          ), 'Belum Ditentukan'
+        ) as mapel_utama,
         COUNT(j.id)::int as total_jam_minggu
       FROM guru g
-      LEFT JOIN mapel m_master ON g.mapel::int = m_master.id
       LEFT JOIN jadwal_pelajaran j ON g.id = j.guru_id AND j.sekolah_id = ${sekolahIdInt}
       WHERE g.sekolah_id = ${sekolahIdInt}
         AND g.jenis IN ('Guru', 'Kepala Sekolah', 'Wakil Kurikulum', 'Wakil Kesiswaan', 'Tenaga Kependidikan')
-      GROUP BY g.id, g.nama, g.nip, g.status, m_master.nama_mapel
+      GROUP BY g.id, g.nama, g.nip, g.status, g.mapel
       ORDER BY g.nama ASC
     `;
 
-    // 3. Ambil detail baris jadwal pelajaran untuk dipetakan ke grid hari kerja
+    // 3. Ambil detail baris jadwal pelajaran (Fix casting mapel di jadwal jika bertipe varchar/int)
     const jadwalRes = await sql`
       SELECT 
         j.guru_id,
@@ -45,7 +50,7 @@ export default async function MonitoringJadwalPage() {
         j.jam_selesai,
         mp.nama_mapel
       FROM jadwal_pelajaran j
-      JOIN mapel mp ON j.mapel::int = mp.id
+      JOIN mapel mp ON j.mapel = mp.id::varchar
       WHERE j.sekolah_id = ${sekolahIdInt}
       ORDER BY j.jam_mulai ASC
     `;

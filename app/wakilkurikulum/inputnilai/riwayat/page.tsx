@@ -1,3 +1,4 @@
+// app/wakilkurikulum/inputnilai/riwayat/page.tsx
 import { auth } from "@/auth";
 import { sql } from "@vercel/postgres";
 import { redirect } from "next/navigation";
@@ -29,7 +30,7 @@ export default async function RiwayatInputNilaiPage() {
     );
   }
 
-  // 2. Ambil data asli guru dan mapel menggunakan INNER JOIN satu pintu demi efisiensi
+  // 2. Ambil data asli guru dan list ID mapel yang dia miliki
   const guruRes = await sql`
     SELECT g.id, g.mapel 
     FROM users u
@@ -42,35 +43,56 @@ export default async function RiwayatInputNilaiPage() {
     redirect("/wakilkurikulum/inputnilai");
   }
 
-  const guruIdInt = guruData.id; // ID Integer asli dari tabel guru
-  const mapelGuru = guruData.mapel || ""; // 💡 Sekarang berisi ID Mapel (misal: "12")
-
-  // 💡 AMBIL NAMA MAPEL ASLI UNTUK TEKS DI HEADER UI
-  let namaMapelTxt = "Mata Pelajaran";
-  if (mapelGuru) {
-    const mapelNameRes = await sql`SELECT nama_mapel FROM mapel WHERE id = ${parseInt(mapelGuru.toString(), 10)}`;
-    if (mapelNameRes.rows.length > 0) {
-      namaMapelTxt = mapelNameRes.rows[0].nama_mapel;
+  const guruIdInt = guruData.id; 
+  
+  // 💡 Antisipasi jika field mapel di database berupa array atau string JSON (misal: "[19, 20]" atau "19,20")
+  let mapelIds: number[] = [];
+  try {
+    if (Array.isArray(guruData.mapel)) {
+      mapelIds = guruData.mapel.map((id: any) => parseInt(id, 10));
+    } else if (typeof guruData.mapel === "string") {
+      // Jika disave dalam bentuk string "[19,20]" atau "19,20"
+      const cleanStr = guruData.mapel.replace(/[\[\]]/g, "");
+      mapelIds = cleanStr.split(",").map((id: string) => parseInt(id.trim(), 10)).filter(Boolean);
+    } else if (guruData.mapel) {
+      mapelIds = [parseInt(guruData.mapel, 10)];
     }
+  } catch (e) {
+    console.error("Gagal parsing mapel guru:", e);
   }
 
-  // 3. Query khusus mengambil Murid yang SUDAH PERNAH diinput nilainya di sekolah & oleh guru ini
+  if (mapelIds.length === 0) {
+    return (
+      <div className="p-6 text-center text-amber-600 font-bold bg-white rounded-3xl border border-amber-200 m-8">
+        Kamu belum dikonfigurasi mengampu mata pelajaran apapun oleh Admin.
+      </div>
+    );
+  }
+
+  // 3. Query khusus mengambil data Murid BESERTA Mapelnya (DISTINCT ON kombinasi nama & mapel)
+  // 💡 Di sini kita hilangkan penguncian satu mapel tunggal, tapi memakai operator IN (${mapelIds})
   const muridRes = await sql`
-    SELECT DISTINCT ON (m.nama)
-      m.id, m.nama, m.nisn, m.kelas, m.rombel,
+    SELECT DISTINCT ON (m.nama, n.mapel)
+      m.id, 
+      m.nama, 
+      m.nisn, 
+      m.kelas, 
+      m.rombel,
+      n.mapel as mapel_id,
+      (SELECT nama_mapel FROM mapel WHERE id = CAST(n.mapel AS INTEGER) LIMIT 1) as nama_mapel,
       
-      (SELECT id FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${mapelGuru} AND semester = 'Ganjil' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as id_ganjil,
-      (SELECT nilai_angka FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${mapelGuru} AND semester = 'Ganjil' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as angka_ganjil,
+      (SELECT id FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = n.mapel AND semester = 'Ganjil' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as id_ganjil,
+      (SELECT nilai_angka FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = n.mapel AND semester = 'Ganjil' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as angka_ganjil,
       
-      (SELECT id FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${mapelGuru} AND semester = 'Genap' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as id_genap,
-      (SELECT nilai_angka FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${mapelGuru} AND semester = 'Genap' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as angka_genap
+      (SELECT id FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = n.mapel AND semester = 'Genap' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as id_genap,
+      (SELECT nilai_angka FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = n.mapel AND semester = 'Genap' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as angka_genap
     FROM murid m
     INNER JOIN nilai n ON m.id = n.murid_id
     WHERE n.guru_id = ${guruIdInt}         
       AND n.sekolah_id = ${sekolahIdInt}   
-      AND n.mapel = ${mapelGuru} -- 💡 Tetap membandingkan ID Mapel di database
+      AND CAST(n.mapel AS INTEGER) = ANY(${mapelIds as any}) -- 💡 Mengambil semua data dari list mapel guru
       AND n.tahun_ajaran = ${tahunAjaranAktif}
-    ORDER BY m.nama ASC
+    ORDER BY m.nama ASC, n.mapel ASC
   `;
 
   const tableData = muridRes.rows;
@@ -88,12 +110,11 @@ export default async function RiwayatInputNilaiPage() {
           </div>
           <h1 className="text-2xl font-extrabold text-slate-800">Siswa Sudah Diisi Nilai</h1>
           <p className="text-slate-500 text-sm">
-            {/* 💡 SEKARANG MENGGUNAKAN namaMapelTxt AGAR YANG KELUAR NAMA MAPELNYA */}
-            Mata Pelajaran: <span className="font-bold text-slate-700">{namaMapelTxt}</span>
+            Menampilkan riwayat nilai dari semua mata pelajaran yang kamu ampu.
           </p>
         </div>
 
-        {/* Tombol Kembali ke halaman input utama */}
+        {/* Tombol Kembali ke halaman pencarian utama */}
         <Link 
           href="/wakilkurikulum/inputnilai" 
           className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm transition-all shadow-sm"
@@ -104,11 +125,12 @@ export default async function RiwayatInputNilaiPage() {
 
       {/* Info Box */}
       <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl text-sm text-blue-700">
-        💡 Menampilkan daftar semua murid yang <strong>sudah memiliki data nilai</strong> ganjil/genap pada mata pelajaranmu. Kamu bisa langsung klik tombol untuk edit nilai atau isi semester genap.
+        💡 Menampilkan daftar semua murid yang <strong>sudah memiliki data nilai</strong> ganjil/genap. Data dikelompokkan per siswa dan per mata pelajaran yang kamu ajar.
       </div>
 
       {/* Tabel Data Riwayat */}
       {tableData.length > 0 ? (
+        // 💡 Kirim data ke NilaiTable, pastikan NilaiTable kamu merender kolom "Mata Pelajaran" nya!
         <NilaiTable initialData={tableData} />
       ) : (
         <div className="text-center py-12 border border-dashed rounded-3xl text-slate-400 font-medium bg-white">

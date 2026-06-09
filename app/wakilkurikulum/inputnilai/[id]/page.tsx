@@ -1,7 +1,8 @@
+// app/wakilkurikulum/inputnilai/[id]/page.tsx
 import { auth } from "@/auth";
 import { sql } from "@vercel/postgres";
 import { notFound, redirect as nextRedirect } from "next/navigation";
-import FormInputNilai from "@/components/FormInputNilaiWKR";
+import FormInputNilai from "@/components/FormInputNilai";
 import { getTahunAjaranDinamis } from "@/lib/actions";
 
 export default async function HalamanFormNilai({ 
@@ -9,7 +10,7 @@ export default async function HalamanFormNilai({
   searchParams
 }: { 
   params: Promise<{ id: string }>,
-  searchParams: Promise<{ s?: string }>
+  searchParams: Promise<{ s?: string; mapel?: string }> // 🔥 Tambahkan mapel di sini
 }) {
   const session = await auth();
   
@@ -18,7 +19,7 @@ export default async function HalamanFormNilai({
   }
 
   const { id } = await params;
-  const { s } = await searchParams;
+  const { s, mapel } = await searchParams; // 🔥 Ambil nilai mapel dari URL query string
   const semesterPilihan = s || "Ganjil";
 
   if (isNaN(Number(id))) {
@@ -46,12 +47,14 @@ export default async function HalamanFormNilai({
   }
 
   const guruIdInt = guruData.id; 
-  const mapelGuru = guruData.mapel || ""; // 💡 Ini berisi ID Mapel (misal: "12")
 
-  // 💡 AMBIL NAMA MAPEL ASLI DARI TABEL MAPEL BERDASARKAN ID
+  // 🔥 JIKA parameter mapel ada di URL, pakai itu. Jika tidak ada, baru fallback ke default guruData.mapel
+  const mapelPilihanId = mapel || guruData.mapel || ""; 
+
+  // 💡 AMBIL NAMA MAPEL ASLI DARI TABEL MAPEL BERDASARKAN ID YANG DIPILIH SECARA DINAMIS
   let namaMapelTxt = "Mata Pelajaran";
-  if (mapelGuru) {
-    const mapelNameRes = await sql`SELECT nama_mapel FROM mapel WHERE id = ${parseInt(mapelGuru.toString(), 10)}`;
+  if (mapelPilihanId) {
+    const mapelNameRes = await sql`SELECT nama_mapel FROM mapel WHERE id = ${parseInt(mapelPilihanId.toString(), 10)}`;
     if (mapelNameRes.rows.length > 0) {
       namaMapelTxt = mapelNameRes.rows[0].nama_mapel;
     }
@@ -66,11 +69,12 @@ export default async function HalamanFormNilai({
 
   if (!murid) notFound();
 
+  // 🔥 Cari nilai berdasarkan mapelPilihanId yang dinamis, bukan mapel default guru lagi
   const nilaiRes = await sql`
     SELECT * FROM nilai 
     WHERE murid_id = ${Number(id)} 
       AND guru_id = ${guruIdInt} 
-      AND mapel = ${mapelGuru} 
+      AND mapel = ${mapelPilihanId.toString()} 
       AND semester = ${semesterPilihan}
       AND sekolah_id = ${sekolahIdInt}
   `;
@@ -87,8 +91,8 @@ export default async function HalamanFormNilai({
         muridId={murid.id} 
         guruId={guruIdInt}         
         sekolahId={sekolahIdInt}   
-        mapelDefault={mapelGuru}      // 💡 Tetap ID Mapel untuk kebutuhan payload simpan data
-        namaMapelTxt={namaMapelTxt}  // 💡 Oper Nama Mapel teks asli ke Client Component
+        mapelDefault={mapelPilihanId.toString()} // 🔥 Kirim ID Mapel pilihan yang dinamis ke Form
+        namaMapelTxt={namaMapelTxt}  
         semesterDefault={semesterPilihan}
         dataLama={dataLama}        
         detailMurid={{

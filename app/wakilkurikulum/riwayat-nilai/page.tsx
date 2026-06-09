@@ -1,3 +1,4 @@
+// app/guru/riwayat-nilai/page.tsx
 import { auth } from "@/auth";
 import { sql } from "@vercel/postgres";
 import { redirect } from "next/navigation";
@@ -46,18 +47,31 @@ export default async function RiwayatNilaiPage() {
   }
 
   const guruIdInt = guruData.id; // ID Integer asli dari tabel guru
-  const mapelGuru = guruData.mapel || "";
-
-  // 💡 AMBIL NAMA MAPEL ASLI UNTUK TEKS DI HEADER & TABEL
-  let namaMapelTxt = "Mata Pelajaran";
-  if (mapelGuru) {
-    const mapelNameRes = await sql`SELECT nama_mapel FROM mapel WHERE id = ${parseInt(mapelGuru.toString(), 10)}`;
-    if (mapelNameRes.rows.length > 0) {
-      namaMapelTxt = mapelNameRes.rows[0].nama_mapel;
+  
+  // 💡 Parsing data mapel guru (antisipasi jika tipenya array atau string JSON list)
+  let mapelIds: number[] = [];
+  try {
+    if (Array.isArray(guruData.mapel)) {
+      mapelIds = guruData.mapel.map((id: any) => parseInt(id, 10));
+    } else if (typeof guruData.mapel === "string") {
+      const cleanStr = guruData.mapel.replace(/[\[\]{}]/g, "");
+      mapelIds = cleanStr.split(",").map((id: string) => parseInt(id.trim(), 10)).filter(Boolean);
+    } else if (guruData.mapel) {
+      mapelIds = [parseInt(guruData.mapel, 10)];
     }
+  } catch (e) {
+    console.error("Gagal parsing mapel guru:", e);
   }
 
-  // 3. Query mengambil seluruh riwayat nilai, dikunci dengan sekolah_id dan guru_id (Integer)
+  if (mapelIds.length === 0) {
+    return (
+      <div className="p-6 text-center text-amber-600 font-bold bg-white rounded-3xl border border-amber-200 m-8">
+        Kamu belum dikonfigurasi mengampu mata pelajaran apapun oleh Admin.
+      </div>
+    );
+  }
+
+  // 3. Query mengambil seluruh riwayat nilai menggunakan ANY() agar mencakup seluruh mapel yang diampu
   const riwayatRes = await sql`
     SELECT 
       n.id as nilai_id,
@@ -67,22 +81,20 @@ export default async function RiwayatNilaiPage() {
       n.nilai_angka,
       n.tahun_ajaran,
       n.semester,
-      n.mapel, -- Ini menampung string ID
+      n.mapel, -- menampung ID mapel dari row nilai
+      (SELECT nama_mapel FROM mapel WHERE id = CAST(n.mapel AS INTEGER) LIMIT 1) as nama_mapel, -- 💡 Cari nama teks mapel asli langsung dari db
       m.nama as nama_murid,
       m.nisn
     FROM nilai n
     JOIN murid m ON n.murid_id = m.id
     WHERE n.guru_id = ${guruIdInt}          
       AND n.sekolah_id = ${sekolahIdInt}    
-      AND n.mapel = ${mapelGuru}
+      AND CAST(n.mapel AS INTEGER) = ANY(${mapelIds as any}) -- 💡 Support multi-mapel
+      AND n.tahun_ajaran = ${tahunAjaranAktif}
     ORDER BY n.id DESC
   `;
 
-  // 💡 SISIPKAN PROPERTI nama_mapel KE TIAP BARIS DATA SEBELUM DIKIRIM KE CLIENT
-  const dataRiwayat = riwayatRes.rows.map((row) => ({
-    ...row,
-    nama_mapel: namaMapelTxt, // Menyisipkan nama asli teks mapel hasil query di atas
-  }));
+  const dataRiwayat = riwayatRes.rows;
 
   return (
     <div className="space-y-6 p-2 text-left">
@@ -93,10 +105,9 @@ export default async function RiwayatNilaiPage() {
             <NotebookText size={32} />
           </div>
           <div>
-            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">Riwayat Input Nilai</h1>
+            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">Riwayat Rekap Nilai</h1>
             <p className="text-slate-500 font-bold uppercase tracking-widest text-xs mt-2 italic">
-              {/* 💡 GANTI JADI namaMapelTxt */}
-              Arsip seluruh nilai mata pelajaran {namaMapelTxt} yang pernah Anda berikan
+              Arsip seluruh rekap nilai dari semua mata pelajaran yang Anda ampu
             </p>
           </div>
         </div>
@@ -111,7 +122,7 @@ export default async function RiwayatNilaiPage() {
         </div>
       </div>
 
-      {/* Lempar data riwayat yang sudah di-mapping aman ke komponen client */}
+      {/* Lempar data riwayat yang sudah aman ke komponen client */}
       <ClientRiwayatTable initialData={dataRiwayat} />
     </div>
   );
