@@ -1,6 +1,7 @@
+// components/FilterNilai.tsx
 "use client";
 
-import { Search, X, ChevronDown } from "lucide-react";
+import { Search, X, ChevronDown, BookOpen } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition, useRef, useEffect } from "react";
 import { checkRombelConflict } from "@/lib/actions";
@@ -9,7 +10,9 @@ interface FilterNilaiProps {
   query: string;
   filterKelas: string;
   allMuridList: any[];
-  mapelGuru: string; // 💡 Berisi ID Mapel string
+  mapelGuru: string; 
+  listMapelGuru: any[];
+  selectedMapel: string;
   tahunAjaran: string;
   guruId: string;
   sekolahId: number;
@@ -19,7 +22,9 @@ export default function FilterNilai({
   query, 
   filterKelas, 
   allMuridList, 
-  mapelGuru, 
+  mapelGuru,
+  listMapelGuru,
+  selectedMapel,
   tahunAjaran, 
   guruId,
   sekolahId
@@ -52,10 +57,11 @@ export default function FilterNilai({
     return matchesSearch && matchesKelas;
   });
 
-  const applySearch = (term: string, kelas: string) => {
+  const applySearch = (term: string, kelas: string, mapelId: string) => {
     const params = new URLSearchParams(searchParams);
     if (term) params.set("q", term); else params.delete("q");
     if (kelas && kelas !== "Semua") params.set("kelas", kelas); else params.delete("kelas");
+    if (mapelId) params.set("mapel", mapelId);
 
     startTransition(() => {
       router.push(`?${params.toString()}`);
@@ -63,29 +69,50 @@ export default function FilterNilai({
   };
 
   const handleSelectMurid = async (murid: any) => {
-    // mapelGuru di bawah ini otomatis membawa ID Mapel dengan aman
     const check = await checkRombelConflict(murid.id, mapelGuru, tahunAjaran, guruId, sekolahId);
     
     if (!check.allowed) {
       alert(check.error);
       setSearch("");
-      applySearch("", filterKelas);
+      applySearch("", filterKelas, selectedMapel);
       setIsOpen(false);
       return;
     }
 
     setSearch(murid.nama);
-    applySearch(murid.nama, filterKelas);
+    applySearch(murid.nama, filterKelas, selectedMapel);
     setIsOpen(false);
   };
 
   const handleClear = () => {
     setSearch("");
-    applySearch("", filterKelas);
+    applySearch("", filterKelas, selectedMapel);
   };
 
   return (
-    <div ref={dropdownRef} className="flex flex-col md:flex-row gap-4 items-center bg-slate-50 p-4 rounded-2xl border border-slate-200 relative text-left">
+    <div ref={dropdownRef} className="flex flex-col lg:flex-row gap-4 items-center bg-slate-50 p-4 rounded-2xl border border-slate-200 relative text-left">
+      
+      {/* DROPDOWN PILIHAN MAPEL */}
+      <div className="relative w-full lg:w-72 shrink-0">
+        <BookOpen size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+        <select
+          value={selectedMapel}
+          onChange={(e) => {
+            setSearch("");
+            applySearch("", filterKelas, e.target.value);
+          }}
+          className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-black text-xs text-slate-800 appearance-none uppercase"
+        >
+          {listMapelGuru.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.nama_mapel}
+            </option>
+          ))}
+        </select>
+        <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+      </div>
+
+      {/* SEARCH INPUT MURID */}
       <div className="relative flex-1 w-full">
         <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${isPending ? "text-blue-500 animate-pulse" : "text-slate-400"}`} size={20} />
         
@@ -135,7 +162,7 @@ export default function FilterNilai({
                     </span>
                   </div>
                 </div>
-              ))
+              )) // 🔥 Kurang penutup ini kemarin!
             )}
           </div>
         )}

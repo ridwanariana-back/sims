@@ -23,13 +23,14 @@ export default async function WaliKelasPage() {
   const d = new Date();
   const TAHUN_AKTIF = d.getMonth() + 1 > 6 ? `${d.getFullYear()}/${d.getFullYear() + 1}` : `${d.getFullYear() - 1}/${d.getFullYear()}`;
 
-  // 1. Ambil data guru HANYA yang terdaftar di sekolah ini
-  const { rows: allGuru } = await sql`
-    SELECT id, nama, nip 
-    FROM guru 
-    WHERE sekolah_id = ${sekolahIdInt}  AND jenis ='Guru' AND jenis ='Tenaga Kependidikan' 
-    ORDER BY nama ASC
-  `;
+  // 1. Ambil data guru HANYA yang terdaftar di sekolah ini (DIPERBAIKI 💡)
+const { rows: allGuru } = await sql`
+  SELECT id, nama, nip 
+  FROM guru 
+  WHERE sekolah_id = ${sekolahIdInt} 
+    AND jenis IN ('Guru', 'Tenaga Kependidikan')
+  ORDER BY nama ASC
+`;
   
   // 2. Ambil data master nama kelas milik sekolah ini dari database
   const { rows: allKelas } = await sql`

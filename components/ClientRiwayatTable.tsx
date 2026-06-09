@@ -1,3 +1,4 @@
+// components/ClientRiwayatTable.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -14,7 +15,6 @@ export default function ClientRiwayatTable({ initialData }: { initialData: any[]
 
   const filteredData = initialData.filter(item => 
     item.nama_murid.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    // 💡 GANTI JADI nama_mapel BIAR FILTER FITUR PENCARIAN SINKRON DENGAN NAMA TEKS ASLINYA
     (item.nama_mapel && item.nama_mapel.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
@@ -31,7 +31,7 @@ export default function ClientRiwayatTable({ initialData }: { initialData: any[]
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" size={18} />
           <input 
             type="text" 
-            placeholder="Cari Nama Murid..." 
+            placeholder="Cari nama siswa atau mata pelajaran..." 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-12 pr-6 py-3.5 bg-white border-2 border-slate-200 focus:border-indigo-500 rounded-2xl w-full outline-none font-bold text-sm transition-all shadow-sm"
@@ -71,8 +71,10 @@ export default function ClientRiwayatTable({ initialData }: { initialData: any[]
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-3">
                         <BookOpen size={16} className="text-slate-400" />
-                        {/* 💡 GANTI JADI item.nama_mapel AGAR NAMA MAPEL TEKS YANG DISHOW */}
-                        <p className="text-[11px] font-black text-slate-700 uppercase tracking-tight">{item.nama_mapel || "Mata Pelajaran"}</p>
+                        {/* 💡 Menampilkan nama teks asli mapel secara dinamis per baris */}
+                        <span className="px-2.5 py-1 bg-slate-900 text-white text-[10px] font-black rounded uppercase tracking-wider">
+                          {item.nama_mapel || "Mata Pelajaran"}
+                        </span>
                       </div>
                     </td>
                     <td className="px-8 py-6">

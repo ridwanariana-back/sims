@@ -1,3 +1,4 @@
+// app/guru/inputnilai/page.tsx
 import { auth } from "@/auth";
 import Link from "next/link";
 import { sql } from "@vercel/postgres";
@@ -10,7 +11,7 @@ import { getTahunAjaranDinamis } from "@/lib/actions";
 export default async function InputNilaiPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; kelas?: string }>;
+  searchParams: Promise<{ q?: string; kelas?: string; mapel?: string }>; 
 }) {
   const session = await auth();
   if (!session?.user || session.user.role?.toLowerCase() !== "guru") {
@@ -23,7 +24,6 @@ export default async function InputNilaiPage({
   
   const tahunAjaranAktif = await getTahunAjaranDinamis();
 
-  // 1. Ambil sekolah_id dan ID Guru asli (Integer) dari session login
   const sId = session.user.sekolah_id || (session.user as any).sekolahId;
   const sekolahIdInt = sId ? parseInt(sId.toString(), 10) : null;
 
@@ -44,21 +44,37 @@ export default async function InputNilaiPage({
     );
   }
 
-  // 2. Ambil ID mapel dari tabel guru
+  // 🔥 AMBIL SEMUA ID MAPEL (ARRAY) DARI TABEL GURU
   const guruRes = await sql`SELECT mapel FROM guru WHERE id = ${guruIdInt}`;
   const guruData = guruRes.rows[0];
-  const mapelGuruId = guruData?.mapel || ""; // Sekarang berisi ID Mapel (misal: "12" atau 12)
-
-  // 💡 AMBIL NAMA MAPEL ASLI UNTUK TEKS DI UI GURU
-  let namaMapelTxt = "Mata Pelajaran";
-  if (mapelGuruId) {
-    const mapelNameRes = await sql`SELECT nama_mapel FROM mapel WHERE id = ${parseInt(mapelGuruId.toString(), 10)}`;
-    if (mapelNameRes.rows.length > 0) {
-      namaMapelTxt = mapelNameRes.rows[0].nama_mapel;
-    }
+  
+  let mapelGuruIds: number[] = [];
+  if (Array.isArray(guruData?.mapel)) {
+    mapelGuruIds = guruData.mapel.map(Number);
+  } else if (typeof guruData?.mapel === "string") {
+    const cleaned = guruData.mapel.replace(/{|}/g, "");
+    mapelGuruIds = cleaned ? cleaned.split(",").map(Number) : [];
   }
 
-  // 3. Ambil seluruh daftar murid aktif YANG HANYA BERASAL DARI SEKOLAH INI
+  if (mapelGuruIds.length === 0) {
+    return (
+      <div className="p-6 text-center text-amber-600 font-bold bg-white rounded-3xl border-2 border-amber-100 m-8">
+        Error: Anda belum dikaitkan dengan mata pelajaran apapun.
+      </div>
+    );
+  }
+
+  // 🔥 AMBIL DETAIL SEMUA MAPEL GURU DARI DATABASE
+  const listMapelRes = await sql`
+    SELECT id, nama_mapel FROM mapel WHERE id = ANY(${mapelGuruIds as any})
+  `;
+  const listMapelGuru = listMapelRes.rows;
+
+  // 🔥 Tentukan Mapel Aktif yang sedang dipilih (Default: mapel pertama)
+  const currentMapelId = params.mapel ? parseInt(params.mapel, 10) : listMapelGuru[0]?.id;
+  const mapelAktifData = listMapelGuru.find(m => m.id === currentMapelId) || listMapelGuru[0];
+  const namaMapelTxt = mapelAktifData?.nama_mapel || "Mata Pelajaran";
+
   const allMuridRes = await sql`
     SELECT id, nama, nisn, kelas, rombel 
     FROM murid 
@@ -69,7 +85,7 @@ export default async function InputNilaiPage({
   let tableData: any[] = [];
 
   if (query !== "") {
-    // 4. Query data nilai murid, mapel disesuaikan membandingkan ID Mapel
+    // 🔥 Jalankan query data nilai menggunakan `currentMapelId` yang dinamis
     const muridRes = await sql`
       SELECT 
         m.id, 
@@ -77,10 +93,10 @@ export default async function InputNilaiPage({
         m.nisn, 
         m.kelas, 
         m.rombel,
-        (SELECT id FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${mapelGuruId} AND semester = 'Ganjil' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as id_ganjil,
-        (SELECT nilai_angka FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${mapelGuruId} AND semester = 'Ganjil' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as angka_ganjil,
-        (SELECT id FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${mapelGuruId} AND semester = 'Genap' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as id_genap,
-        (SELECT nilai_angka FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${mapelGuruId} AND semester = 'Genap' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as angka_genap
+        (SELECT id FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${currentMapelId.toString()} AND semester = 'Ganjil' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as id_ganjil,
+        (SELECT nilai_angka FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${currentMapelId.toString()} AND semester = 'Ganjil' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as angka_ganjil,
+        (SELECT id FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${currentMapelId.toString()} AND semester = 'Genap' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as id_genap,
+        (SELECT nilai_angka FROM nilai WHERE murid_id = m.id AND guru_id = ${guruIdInt} AND sekolah_id = ${sekolahIdInt} AND mapel = ${currentMapelId.toString()} AND semester = 'Genap' AND tahun_ajaran = ${tahunAjaranAktif} LIMIT 1) as angka_genap
       FROM murid m
       WHERE m.sekolah_id = ${sekolahIdInt}
         AND (m.nama ILIKE ${query} OR m.nisn ILIKE ${query})
@@ -101,8 +117,7 @@ export default async function InputNilaiPage({
             </span>
           </div>
           <h1 className="text-2xl font-extrabold text-slate-800">Input Nilai Siswa</h1>
-          {/* Menampilkan teks nama asli mapel agar user friendly */}
-          <p className="text-slate-500 text-sm">Mata Pelajaran: <span className="font-bold text-slate-700">{namaMapelTxt}</span></p>
+          <p className="text-slate-500 text-sm">Mode Mengisi: <span className="font-bold text-blue-600 uppercase bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">{namaMapelTxt}</span></p>
         </div>
         <Link
           href="/guru/inputnilai/riwayat"
@@ -116,13 +131,22 @@ export default async function InputNilaiPage({
         query={query} 
         filterKelas={filterKelas} 
         allMuridList={allMuridRes.rows} 
-        mapelGuru={mapelGuruId.toString()} // 💡 Kirim ID Mapel ke komponen client filter
+        mapelGuru={currentMapelId.toString()} 
+        listMapelGuru={listMapelGuru} 
+        selectedMapel={currentMapelId.toString()} 
         tahunAjaran={tahunAjaranAktif}
         guruId={guruIdInt.toString()}
         sekolahId={sekolahIdInt}
       />
 
-      <NilaiTable initialData={tableData} />
+      {/* 🔥 Data dipetakan agar menyuntikkan mapel_id dan nama_mapel yang sedang aktif dipilih di dropdown */}
+      <NilaiTable 
+        initialData={tableData.map(row => ({
+          ...row,
+          mapel_id: currentMapelId,
+          nama_mapel: namaMapelTxt
+        }))} 
+      />
     </div>
   );
 }

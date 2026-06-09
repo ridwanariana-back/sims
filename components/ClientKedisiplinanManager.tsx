@@ -276,7 +276,7 @@ export default function ClientKedisiplinanManager({ guruId, sekolahId, kelasWali
                 >
                   <option value="">-- Pilih Nama Murid --</option>
                   {listMurid.map((m: any) => (
-                    <option key={m.id} value={m.id}>{m.nama.toUpperCase()}</option>
+                    <option key={m.id} value={m.id}>{m.nama.toUpperCase()}[NISN: {m.nisn}]</option>
                   ))}
                 </select>
               </div>

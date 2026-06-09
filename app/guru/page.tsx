@@ -42,49 +42,66 @@ export default async function DashboardGuru() {
 
   // 2. 💡 AMBIL GURU_ID ASLI DARI TABEL GURU (BUKAN USER ID LOGINS)
   const guruRes = await sql`
-    SELECT g.id, g.mapel 
-    FROM users u
-    INNER JOIN guru g ON u.guru_id = g.id
-    WHERE u.id = ${userIdFromSession}
-  `;
-  const guruData = guruRes.rows[0];
+  SELECT g.id, g.mapel 
+  FROM users u
+  INNER JOIN guru g ON u.guru_id = g.id
+  WHERE u.id = ${userIdFromSession}
+`;
+const guruData = guruRes.rows[0];
 
-  if (!guruData) {
-    return (
-      <div className="p-6 text-center text-rose-600 font-bold bg-white rounded-3xl border-2 border-rose-100 m-8">
-        Error: Profil Guru tidak ditemukan di sistem database.
-      </div>
-    );
-  }
+if (!guruData) {
+  return (
+    <div className="p-6 text-center text-rose-600 font-bold bg-white rounded-3xl border-2 border-rose-100 m-8">
+      Error: Profil Guru tidak ditemukan di sistem database.
+    </div>
+  );
+}
 
   const guruIdInt = guruData.id; // 💡 Ini ID Integer asli tabel guru untuk filter data!
   const mapelGuruId = guruData.mapel || "";
 
   // 💡 AMBIL NAMA MAPEL TEKS UNTUK DITAMPILKAN DI SUBTITLE GREETING
-  let namaMapelTxt = "Mata Pelajaran";
-  if (mapelGuruId) {
-    const mapelNameRes = await sql`SELECT nama_mapel FROM mapel WHERE id = ${parseInt(mapelGuruId.toString(), 10)}`;
-    if (mapelNameRes.rows.length > 0) {
-      namaMapelTxt = mapelNameRes.rows[0].nama_mapel;
-    }
+  let mapelGuruIds: number[] = [];
+if (Array.isArray(guruData.mapel)) {
+  mapelGuruIds = guruData.mapel.map(Number);
+} else if (typeof guruData.mapel === "string") {
+  // Antisipasi jika formatnya bawaan postgres string "{19,20}"
+  const cleaned = guruData.mapel.replace(/{|}/g, "");
+  mapelGuruIds = cleaned ? cleaned.split(",").map(Number) : [];
+}
+
+let namaMapelTxt = "Mata Pelajaran";
+if (mapelGuruIds.length > 0) {
+  // 🔥 PERBAIKAN 2: Gunakan operator IN untuk mengambil semua mapel yang ada di array
+  const mapelNameRes = await sql`
+    SELECT nama_mapel 
+    FROM mapel 
+    WHERE id = ANY(${mapelGuruIds as any})
+  `;
+  if (mapelNameRes.rows.length > 0) {
+    // Gabungkan nama mapel dengan koma, misal: "Matematika, Fisika"
+    namaMapelTxt = mapelNameRes.rows.map(r => r.nama_mapel).join(", ");
   }
+}
+
 
   // 3. Ambil Data Universal (Gunakan guruIdInt yang asli dari tabel guru)
   const statsGuru = await sql`
-    SELECT 
-      (
-        SELECT COUNT(DISTINCT rombel) 
-        FROM murid 
-        WHERE sekolah_id = ${sekolahIdInt}
-      ) as total_semua_kelas,
-      (
-        SELECT count(*) 
-        FROM nilai 
-        WHERE guru_id = ${guruIdInt} -- 💡 Sudah pakai ID guru asli
-        AND sekolah_id = ${sekolahIdInt}
-        AND mapel = ${mapelGuruId}
-      ) as total_input_nilai
-  `;
+  SELECT 
+    (
+      SELECT COUNT(DISTINCT rombel) 
+      FROM murid 
+      WHERE sekolah_id = ${sekolahIdInt}
+    ) as total_semua_kelas,
+    (
+      SELECT count(*) 
+      FROM nilai 
+      WHERE guru_id = ${guruIdInt}
+      AND sekolah_id = ${sekolahIdInt}
+      -- 🔥 PERBAIKAN 3: Hitung total nilai dari SEMUA mapel yang diampu guru ini
+      AND mapel = ANY(${mapelGuruIds as any})
+    ) as total_input_nilai
+`;
 
   // 4. Ambil Data Khusus Wali Kelas (Jika user terdeteksi sebagai wali kelas)
   let statsWali = null;
@@ -135,23 +152,24 @@ export default async function DashboardGuru() {
   const dataGuru = statsGuru.rows[0];
 
   // 5. Ambil rata-rata nilai per rombel (Gunakan guruIdInt asli dan mapelGuruId)
-  const grafikRes = await sql`
-    SELECT 
-      m.rombel, 
-      AVG(n.nilai_angka)::numeric(10,2) as rata 
-    FROM nilai n
-    JOIN murid m ON n.murid_id = m.id
-    WHERE n.guru_id = ${guruIdInt} -- 💡 Sudah pakai ID guru asli
-    AND n.sekolah_id = ${sekolahIdInt}
-    AND n.mapel = ${mapelGuruId}
-    GROUP BY m.rombel
-    ORDER BY m.rombel ASC
-  `;
+ const grafikRes = await sql`
+  SELECT 
+    m.rombel, 
+    AVG(n.nilai_angka)::numeric(10,2) as rata 
+  FROM nilai n
+  JOIN murid m ON n.murid_id = m.id
+  WHERE n.guru_id = ${guruIdInt}
+  AND n.sekolah_id = ${sekolahIdInt}
+  -- 🔥 PERBAIKAN 4: Grafik menampilkan gabungan rata-rata semua mapel yang diampu
+  AND n.mapel = ANY(${mapelGuruIds as any})
+  GROUP BY m.rombel
+  ORDER BY m.rombel ASC
+`;
 
-  const dataGrafik = grafikRes.rows.map((row: any) => ({
-    rombel: row.rombel,
-    rata: parseFloat(row.rata)
-  }));
+const dataGrafik = grafikRes.rows.map((row: any) => ({
+  rombel: row.rombel,
+  rata: parseFloat(row.rata)
+}));
 
   return (
     <div className="p-6 lg:p-10 space-y-8 text-left">
