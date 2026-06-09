@@ -1,4 +1,3 @@
-// app/kepalasekolah/dataguru/page.tsx
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { sql } from "@vercel/postgres";
@@ -16,7 +15,7 @@ export default async function DetailGuruPage() {
   const sId = session.user.sekolah_id || (session.user as any).sekolahId;
   const sekolahIdInt = sId ? parseInt(sId.toString(), 10) : null;
 
-  // 2. Fetch Data Guru Riil (Fix Fallback Mapel dari Master Tabel Guru)
+  // 2. Fetch Data Guru Riil (Fix Komparasi Multi-Mapel Array)
   const guruRes = await sql`
     SELECT 
       g.id,
@@ -25,8 +24,14 @@ export default async function DetailGuruPage() {
       g.status, -- PNS / HONORER
       g.jenis as role_internal,
       
-      -- SEKARANG AMBIL NAMA MAPEL LANGSUNG DARI RELASI TABEL GURU KELOMPOK UTAMA
-      COALESCE(m_master.nama_mapel, 'Belum Ditentukan') as mapel_utama,
+      -- 💡 FIX MULTI-MAPEL ARRAY: Ambil semua nama mapel yang ID-nya ada di dalam array g.mapel lalu gabungkan dengan koma
+      COALESCE(
+        (
+          SELECT string_agg(m.nama_mapel, ', ')
+          FROM mapel m
+          WHERE m.id = ANY(g.mapel)
+        ), 'Belum Ditentukan'
+      ) as mapel_utama,
 
       -- HITUNG TOTAL BEBAN MENGAJAR (Hanya menghitung mapel yang BUKAN kelompok 'Kegiatan')
       COALESCE(
@@ -45,8 +50,6 @@ export default async function DetailGuruPage() {
         ELSE 'GURU KELAS'
       END as jabatan_perwalian
     FROM guru g
-    -- JOIN UTAMA KE TABEL MAPEL BERDASARKAN BAGIAN KEAHLIAN GURU
-    LEFT JOIN mapel m_master ON g.mapel = m_master.id::varchar
     LEFT JOIN wali_kelas wk ON g.id = wk.guru_id
     WHERE g.sekolah_id = ${sekolahIdInt} 
       AND g.jenis IN ('Guru', 'Kepala Sekolah', 'Wakil Kurikulum', 'Wakil Kesiswaan', 'Tenaga Kependidikan')
@@ -66,7 +69,7 @@ export default async function DetailGuruPage() {
       nama: row.nama,
       status: row.status ? row.status.toUpperCase() : "HONORER",
       jamMengajar: row.total_jam || 0,
-      mapel: row.mapel_utama, // Menampilkan Sejarah, Bahasa Indonesia, dll secara absolut
+      mapel: row.mapel_utama, // Otomatis berformat string mulus (Contoh: "Matematika, Fisika")
       jabatan: labelJabatan
     };
   });

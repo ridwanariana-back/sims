@@ -1,10 +1,9 @@
-// components/DetailGuruClient.tsx
 "use client";
 
 import { useState } from "react";
 import ExcelJS from "exceljs";
 import Link from "next/link";
-import { ArrowLeft, Download, Search, UserCheck } from "lucide-react";
+import { ArrowLeft, Download, Search, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Guru {
   id: number;
@@ -25,18 +24,21 @@ interface DetailGuruClientProps {
 export default function DetailGuruClient({ initialDataGuru, namaSekolah, userSession }: DetailGuruClientProps) {
   const [dataGuru] = useState<Guru[]>(initialDataGuru);
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // == STATE PAGINATION ==
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // == LOGIKA TOMBOL KEMBALI DINAMIS BERDASARKAN ROLE ==
   const userRole = userSession?.user?.role?.toLowerCase() || "guru";
   
-  let backPath = "/"; // jalur fallback aman
-  
+  let backPath = "/";
   if (userRole === "kepalasekolah") {
     backPath = "/kepalasekolah";
   } else if (userRole === "wakilkurikulum") {
-    backPath = "/wakilkurikulum"; // sesuaikan dengan folder path dashboard kurikulummu
+    backPath = "/wakilkurikulum";
   } else if (userRole === "wakilkesiswaan") {
-    backPath = "/wakilkesiswaan"; // sesuaikan dengan folder path dashboard kesiswaanmu
+    backPath = "/wakilkesiswaan";
   }
 
   // Filter pencarian data guru dinamis di sisi client
@@ -46,13 +48,25 @@ export default function DetailGuruClient({ initialDataGuru, namaSekolah, userSes
     guru.mapel.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // == HITUNG DATA UNTUK PAGINATION ==
+  const totalPages = Math.ceil(filteredGuru.length / itemsPerPage);
+  // Reset ke halaman 1 jika user mengetik pencarian baru agar tidak out-of-bounds
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentGuruList = filteredGuru.slice(indexOfFirstItem, indexOfLastItem);
+
+  const handlePageChange = (pageNumber: number) => {
+    if (pageNumber >= 1 && pageNumber <= totalPages) {
+      setCurrentPage(pageNumber);
+    }
+  };
+
   const exportToExcelWithChart = async () => {
     if (filteredGuru.length === 0) return alert("Tidak ada data untuk di-export!");
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Laporan Beban Kerja Guru");
 
-    // 1. Setup Kolom Tabel Utama Excel
     worksheet.columns = [
       { header: "NIP", key: "nip", width: 25 },
       { header: "Nama Lengkap Guru", key: "nama", width: 35 },
@@ -62,7 +76,6 @@ export default function DetailGuruClient({ initialDataGuru, namaSekolah, userSes
       { header: "Beban Mengajar (JP)", key: "jamMengajar", width: 22 },
     ];
 
-    // Styling Header Row (Tema Neo-Brutalisme Slate 900)
     worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFF" }, name: "Arial", size: 11 };
     worksheet.getRow(1).fill = {
       type: "pattern",
@@ -71,21 +84,19 @@ export default function DetailGuruClient({ initialDataGuru, namaSekolah, userSes
     };
     worksheet.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
 
-    // 2. Masukkan Data Riil Database ke baris Excel
     filteredGuru.forEach((guru) => {
       worksheet.addRow(guru);
     });
 
-    // 3. ENGINE GRAFIK: Suntik QuickChart API ke Excel Sheet
     const chartConfig = {
       type: "bar",
       data: {
-        labels: filteredGuru.map((g) => g.nama.split(" ")[0]), // Ambil kata pertama nama guru agar chart rapi
+        labels: filteredGuru.map((g) => g.nama.split(" ")[0]),
         datasets: [{
           label: "Beban Mengajar (JP)",
           data: filteredGuru.map((g) => g.jamMengajar),
-          backgroundColor: "#818cf8", // Indigo 400
-          borderColor: "#4338ca", // Indigo 700
+          backgroundColor: "#818cf8",
+          borderColor: "#4338ca",
           borderWidth: 2
         }]
       },
@@ -112,7 +123,6 @@ export default function DetailGuruClient({ initialDataGuru, namaSekolah, userSes
         extension: "png",
       });
 
-      // Tempatkan Grafik di kolom H baris 2
       worksheet.addImage(imageId, {
         tl: { col: 7, row: 1 },
         ext: { width: 550, height: 320 }
@@ -121,7 +131,6 @@ export default function DetailGuruClient({ initialDataGuru, namaSekolah, userSes
       console.error("Gagal menyuntikkan grafik otomatis:", error);
     }
 
-    // 4. Trigger Download file excel di browser laptop user
     const buffer = await workbook.xlsx.writeBuffer();
     const fileBlob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const fileUrl = URL.createObjectURL(fileBlob);
@@ -161,46 +170,57 @@ export default function DetailGuruClient({ initialDataGuru, namaSekolah, userSes
         </div>
       </div>
 
-      {/* FILTER SEARCH BAR BARU */}
+      {/* FILTER SEARCH BAR */}
       <div className="bg-white p-4 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex items-center gap-3 max-w-md">
         <Search className="text-slate-400 shrink-0" size={18} />
         <input 
           type="text" 
           placeholder="CARI NAMA GURU ATAU MATA PELAJARAN..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => {
+            setSearchQuery(e.target.value);
+            setCurrentPage(1); // Balik ke page 1 tiap kali nyari guru
+          }}
           className="w-full text-xs font-black uppercase text-slate-900 placeholder-slate-400 outline-none tracking-tight"
         />
       </div>
 
       {/* VIEW UTAMA DATA TABEL */}
       <div className="bg-white p-6 lg:p-8 rounded-[2.5rem] border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] overflow-x-auto">
-        <table className="w-full text-left text-sm border-collapse">
+        <table className="w-full text-left text-sm border-collapse table-fixed min-w-[800px]">
           <thead>
             <tr className="border-b-4 border-slate-900 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              <th className="pb-4">Nama Lengkap Pendidik</th>
-              <th className="pb-4">NIP / Identitas</th>
-              <th className="pb-4">Mata Pelajaran</th>
-              <th className="pb-4">Status Kerja</th>
-              <th className="pb-4 text-center">Beban Mengajar</th>
+              <th className="pb-4 w-[30%]">Nama Lengkap Pendidik</th>
+              <th className="pb-4 w-[20%] pl-4">NIP / Identitas</th>
+              <th className="pb-4 w-[25%] pl-4">Mata Pelajaran</th>
+              <th className="pb-4 w-[13%]">Status Kerja</th>
+              <th className="pb-4 w-[12%] text-center">Beban Mengajar</th>
             </tr>
           </thead>
           <tbody className="divide-y-2 divide-slate-900/10 font-bold text-xs">
-            {filteredGuru.map((guru) => (
+            {currentGuruList.map((guru) => (
               <tr key={guru.id} className="hover:bg-slate-50/50 transition-colors">
-                <td className="py-4">
+                <td className="py-4 pr-2">
                   <div className="flex flex-col">
-                    <span className="text-slate-900 font-black uppercase text-[13px]">{guru.nama}</span>
+                    <span className="text-slate-900 font-black uppercase text-[13px] break-words">{guru.nama}</span>
                     <span className="text-[9px] font-black tracking-wider text-indigo-500 uppercase flex items-center gap-0.5 mt-0.5">
                       🎖️ {guru.jabatan}
                     </span>
                   </div>
                 </td>
-                <td className="py-4 text-slate-600 font-mono tracking-tight">{guru.nip}</td>
-                <td className="py-4">
-                  <span className="bg-indigo-50 border-2 border-indigo-200 text-indigo-700 px-2.5 py-1 rounded-md text-[10px] font-black uppercase">
-                    📚 {guru.mapel}
-                  </span>
+                {/* Memberikan padding kiri (pl-4) agar tidak terlalu nempel dengan kolom nama */}
+                <td className="py-4 pl-4 text-slate-600 font-mono tracking-tight break-all">{guru.nip}</td>
+                {/* Kolom Mapel dirapikan menggunakan list ul & li */}
+                <td className="py-4 pl-4 vertical-align-top">
+                  <ul className="flex flex-col gap-1.5">
+                    {guru.mapel.split(", ").map((item, index) => (
+                      <li key={index} className="inline-self-start">
+                        <span className="inline-block bg-indigo-50 border-2 border-indigo-200 text-indigo-700 px-2.5 py-1 rounded-md text-[10px] font-black uppercase whitespace-normal break-words">
+                          📚 {item}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </td>
                 <td className="py-4">
                   <span className={`px-2.5 py-0.5 rounded border-2 font-black text-[9px] uppercase ${
@@ -228,6 +248,48 @@ export default function DetailGuruClient({ initialDataGuru, namaSekolah, userSes
             )}
           </tbody>
         </table>
+
+        {/* == UI INTERFACE PAGINATION NEO-BRUTALISME == */}
+        {totalPages > 1 && (
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6 pt-4 border-t-4 border-slate-900">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+              Menampilkan {indexOfFirstItem + 1} - {Math.min(indexOfLastItem, filteredGuru.length)} Dari {filteredGuru.length} Guru
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="p-2 rounded-xl border-2 border-slate-900 bg-white hover:bg-slate-100 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-y-0.5 active:shadow-none disabled:opacity-40 disabled:hover:bg-white disabled:active:translate-y-0 disabled:active:shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] transition-all"
+              >
+                <ChevronLeft size={16} className="text-slate-900" />
+              </button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => handlePageChange(page)}
+                    className={`px-3 py-1.5 rounded-xl border-2 border-slate-900 text-xs font-black transition-all ${
+                      currentPage === page
+                        ? "bg-indigo-500 text-white shadow-none translate-y-0.5"
+                        : "bg-white text-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] hover:bg-slate-100 active:translate-y-0.5 active:shadow-none"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-xl border-2 border-slate-900 bg-white hover:bg-slate-100 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-y-0.5 active:shadow-none disabled:opacity-40 disabled:hover:bg-white disabled:active:translate-y-0 disabled:active:shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] transition-all"
+              >
+                <ChevronRight size={16} className="text-slate-900" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

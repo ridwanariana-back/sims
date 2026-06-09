@@ -5,7 +5,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { handleLogout, getLogoSekolah } from '@/lib/actions';
+// 💡 Impor fungsi cekMapelGuruAtauKepsek yang baru kita buat
+import { handleLogout, getLogoSekolah, cekMapelGuruAtauKepsek } from '@/lib/actions';
 import { useSession } from 'next-auth/react';
 
 export default function KepalaSekolahLayout({
@@ -14,24 +15,35 @@ export default function KepalaSekolahLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-    const { data: session, status } = useSession();
-    const [isOpen, setIsOpen] = useState(false);
-    const [isProfileOpen, setIsProfileOpen] = useState(false);
-    const [logoSekolah, setLogoSekolah] = useState<string>('sekolah.png');
-    const pathname = usePathname();
-  
-    useEffect(() => {
-      async function fetchLogo() {
-        const sId = session?.user?.sekolah_id || (session?.user as any)?.sekolahId;
-        if (sId) {
-          const logo = await getLogoSekolah(sId);
-          setLogoSekolah(logo);
-        }
+  const { data: session, status } = useSession();
+  const [isOpen, setIsOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [logoSekolah, setLogoSekolah] = useState<string>('sekolah.png');
+  // 💡 State baru untuk mengontrol kemunculan menu input nilai
+  const [bisaMengajar, setBisaMengajar] = useState<boolean>(false); 
+  const pathname = usePathname();
+
+  useEffect(() => {
+    async function fetchDataDinamis() {
+      // 1. Ambil Logo Sekolah
+      const sId = session?.user?.sekolah_id || (session?.user as any)?.sekolahId;
+      if (sId) {
+        const logo = await getLogoSekolah(sId);
+        setLogoSekolah(logo);
       }
-      if (status === 'authenticated') {
-        fetchLogo();
+
+      // 2. Ambil ID User dari tabel users (bernilai 55 untuk akun Ibu Rida)
+      const uId = session?.user?.id || (session?.user as any)?.id;
+      if (uId) {
+        const punyaMapel = await cekMapelGuruAtauKepsek(uId);
+        setBisaMengajar(punyaMapel);
       }
-    }, [session, status]);
+    }
+
+    if (status === 'authenticated') {
+      fetchDataDinamis();
+    }
+  }, [session, status]);
 
   // Helper function untuk menentukan class active pada sidebar
   const getLinkStyle = (path: string) => {
@@ -44,7 +56,6 @@ export default function KepalaSekolahLayout({
   };
 
   return (
-    // KUNCI UTAMA 1: Mengunci tinggi layar maksimal sebatas monitor (h-screen) dan mematikan scroll global (overflow-hidden)
     <div className="flex h-screen bg-gray-100 text-slate-900 overflow-hidden relative">
       
       {/* --- SIDEBAR CONTROLLER --- */}
@@ -57,16 +68,15 @@ export default function KepalaSekolahLayout({
         <div className="p-6 flex flex-col items-center border-b border-slate-800 shrink-0">
           <div className="flex w-full justify-between items-center md:justify-center">
             <div className="flex items-center gap-2">
-              {/* 🌟 LOGO SEKOLAH DINAMIS (Membaca dari folder public/sekolah/) */}
-                            <div className="relative h-8 w-8 rounded-md overflow-hidden bg-white flex items-center justify-center p-1">
-                              <Image 
-                                src={`/sekolah/${logoSekolah}`} 
-                                alt="Logo Sekolah" 
-                                fill 
-                                className="object-contain"
-                                priority
-                              />
-                            </div>
+              <div className="relative h-8 w-8 rounded-md overflow-hidden bg-white flex items-center justify-center p-1">
+                <Image 
+                  src={`/sekolah/${logoSekolah}`} 
+                  alt="Logo Sekolah" 
+                  fill 
+                  className="object-contain"
+                  priority
+                />
+              </div>
               <h2 className="text-xl font-black text-blue-400 tracking-wider">SIMS</h2>
             </div>
             <button className="md:hidden text-white text-xl font-black" onClick={() => setIsOpen(false)}>
@@ -75,7 +85,7 @@ export default function KepalaSekolahLayout({
           </div>
         </div>
 
-        {/* Area Navigasi Sidebar - Sekarang bisa di-scroll mandiri jika menu kepanjangan */}
+        {/* Area Navigasi Sidebar */}
         <nav className="flex-1 overflow-y-auto pt-4 pb-8 px-4 space-y-2 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-slate-800 [&::-webkit-scrollbar-thumb]:rounded-full">
           <Link href="/kepalasekolah" className={getLinkStyle('/kepalasekolah')} onClick={() => setIsOpen(false)}>
             Dashboard
@@ -105,16 +115,20 @@ export default function KepalaSekolahLayout({
             Alumni
           </Link>
 
-          {/* Sub Menu Guru */}
-          <div className="pt-4 pb-1 px-4 text-[10px] font-black text-slate-500 uppercase border-t border-slate-800/60 mt-4 select-none">
-            Menu Guru : 
-          </div>
-          <Link href="/kepalasekolah/inputnilai" className={getLinkStyle('/kepalasekolah/inputnilai')} onClick={() => setIsOpen(false)}>
-            Input Nilai
-          </Link>
-          <Link href="/kepalasekolah/riwayat-nilai" className={getLinkStyle('/kepalasekolah/riwayat-nilai')} onClick={() => setIsOpen(false)}>
-            Riwayat Nilai
-          </Link>
+          {/* 💡 MENU GURU KONDISIONAL: Hanya muncul kalau Kepsek mengambil/memiliki Mapel */}
+          {bisaMengajar && (
+            <>
+              <div className="pt-4 pb-1 px-4 text-[10px] font-black text-slate-500 uppercase border-t border-slate-800/60 mt-4 select-none">
+                Menu Guru : 
+              </div>
+              <Link href="/kepalasekolah/inputnilai" className={getLinkStyle('/kepalasekolah/inputnilai')} onClick={() => setIsOpen(false)}>
+                Input Nilai
+              </Link>
+              <Link href="/kepalasekolah/riwayat-nilai" className={getLinkStyle('/kepalasekolah/riwayat-nilai')} onClick={() => setIsOpen(false)}>
+                Riwayat Nilai
+              </Link>
+            </>
+          )}
         </nav>
       </aside>
 
@@ -127,10 +141,9 @@ export default function KepalaSekolahLayout({
       )}
 
       {/* --- MAIN CONTENT AREA --- */}
-      {/* KUNCI UTAMA 2: Memaksa area kanan memiliki tinggi konstan h-screen dan susunan flex vertical */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         
-        {/* Header Atas (Tetap Diam/Sticky) */}
+        {/* Header Atas */}
         <header className="bg-white border-b border-gray-200 px-4 md:px-8 py-4 flex justify-between items-center shadow-sm shrink-0">
           <div className="flex items-center gap-4">
             <button 
@@ -208,7 +221,7 @@ export default function KepalaSekolahLayout({
           </div>
         </header>
 
-        {/* KUNCI UTAMA 3: Bagian isi halaman dibuat scrollable mandiri di sini! */}
+        {/* Bagian isi halaman */}
         <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-gray-100 animate-in fade-in duration-500">
           {children}
         </main>

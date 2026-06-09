@@ -1,4 +1,3 @@
-// app/kepalasekolah/monitoring-jadwal/MonitoringJadwalClient.tsx
 "use client";
 
 import { useState } from "react";
@@ -34,7 +33,7 @@ export default function MonitoringJadwalClient({ initialJadwalGuru, namaSekolah,
   const [dataJadwal] = useState<GuruJadwal[]>(initialJadwalGuru);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const itemsPerPage = 5; // Batasan maksimal 5 kartu guru per halaman
 
   // == JALUR KEMBALI DINAMIS ==
   const userRole = userSession?.user?.role?.toLowerCase() || "guru";
@@ -47,11 +46,17 @@ export default function MonitoringJadwalClient({ initialJadwalGuru, namaSekolah,
     guru.mapel_utama.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Kalkulasi Pagination
+  // == KALKULASI PAGINATION GURU JADWAL ==
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentItems = filteredData.slice(indexOfFirstItem, indexOfLastItem);
+
+  const handlePageChange = (pageNumber: number) => {
+    if (pageNumber >= 1 && pageNumber <= totalPages) {
+      setCurrentPage(pageNumber);
+    }
+  };
 
   // == ENGINE EXPORT EXCELJS + GRAFIK BATANG BEBAN KERJA GURU 📊 ==
   const exportToExcelJadwalDenganGrafik = async () => {
@@ -60,7 +65,6 @@ export default function MonitoringJadwalClient({ initialJadwalGuru, namaSekolah,
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Laporan Beban Mengajar");
 
-    // 1. Setup Susunan Kolom Utama
     worksheet.columns = [
       { header: "NIP", key: "nip", width: 25 },
       { header: "Nama Lengkap Pendidik", key: "nama", width: 35 },
@@ -69,7 +73,6 @@ export default function MonitoringJadwalClient({ initialJadwalGuru, namaSekolah,
       { header: "Beban Kerja (JP)", key: "total_jam_minggu", width: 20 },
     ];
 
-    // 2. Styling Header Tabel (Tema Neo-Brutalisme Slate 900)
     worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFF" }, name: "Arial", size: 11 };
     worksheet.getRow(1).fill = {
       type: "pattern",
@@ -78,18 +81,16 @@ export default function MonitoringJadwalClient({ initialJadwalGuru, namaSekolah,
     };
     worksheet.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
 
-    // 3. Masukkan Data Guru Ke Tabel Excel
     filteredData.forEach((guru) => {
       worksheet.addRow({
         nip: guru.nip,
         nama: guru.nama,
         status: guru.status,
         mapel_utama: guru.mapel_utama,
-        total_jam_minggu: guru.total_jam_minggu, // simpan dalam bentuk angka murni agar bisa digrafikkan
+        total_jam_minggu: guru.total_jam_minggu,
       });
     });
 
-    // Beri format border tipis di baris data agar rapi
     worksheet.eachRow((row, rowNumber) => {
       if (rowNumber > 1) {
         row.getCell("total_jam_minggu").alignment = { horizontal: "center" };
@@ -102,8 +103,8 @@ export default function MonitoringJadwalClient({ initialJadwalGuru, namaSekolah,
       }
     });
 
-    // 4. GENERATE GAMBAR GRAFIK BATANG VIA QUICKCHART API 🚀
-    const namaGuruList = filteredData.map(g => g.nama.substring(0, 15)); // potong nama agar muat di grafik
+    // 4. GENERATE GAMBAR GRAFIK BATANG VIA PROXY API LOKAL (ANTI-CORS) 🚀
+    const namaGuruList = filteredData.map(g => g.nama.substring(0, 15)); 
     const jpList = filteredData.map(g => g.total_jam_minggu);
 
     const chartConfig = {
@@ -113,7 +114,7 @@ export default function MonitoringJadwalClient({ initialJadwalGuru, namaSekolah,
         datasets: [{
           label: "Jumlah Jam Pelajaran (JP) Mingguan",
           data: jpList,
-          backgroundColor: "rgba(99, 102, 241, 0.7)", // Warna Indigo khas SIMS kamu
+          backgroundColor: "rgba(99, 102, 241, 0.7)", 
           borderColor: "rgba(15, 23, 42, 1)",
           borderWidth: 2
         }]
@@ -137,11 +138,14 @@ export default function MonitoringJadwalClient({ initialJadwalGuru, namaSekolah,
       }
     };
 
-    const chartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}&w=600&h=350`;
+    // 💡 UBAH DISINI: Arahkan fetch ke API Proxy lokal buatan kita
+    const proxyUrl = `/api/chart-proxy?c=${encodeURIComponent(JSON.stringify(chartConfig))}`;
 
     try {
-      // Ambil gambar dari API
-      const response = await fetch(chartUrl);
+      // Fetch ke proxy lokal tidak akan memicu CORS Error!
+      const response = await fetch(proxyUrl);
+      if (!response.ok) throw new Error("Gagal mengambil gambar dari proxy server");
+      
       const blob = await response.blob();
       const arrayBuffer = await blob.arrayBuffer();
 
@@ -159,9 +163,9 @@ export default function MonitoringJadwalClient({ initialJadwalGuru, namaSekolah,
 
     } catch (err) {
       console.error("Gagal menyisipkan grafik ke Excel:", err);
+      alert("Grafik gagal dimuat ke Excel karena kendala jaringan, namun file laporan Excel tetap akan diunduh.");
     }
 
-    // 5. Unduh File Excel Hasil Akhir
     const buffer = await workbook.xlsx.writeBuffer();
     const fileBlob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const fileUrl = URL.createObjectURL(fileBlob);
@@ -212,13 +216,13 @@ export default function MonitoringJadwalClient({ initialJadwalGuru, namaSekolah,
           value={searchQuery}
           onChange={(e) => {
             setSearchQuery(e.target.value);
-            setCurrentPage(1);
+            setCurrentPage(1); // Otomatis balik ke halaman 1 saat mengetik kata kunci baru
           }}
           className="w-full text-xs font-black uppercase text-slate-900 placeholder-slate-400 outline-none tracking-tight"
         />
       </div>
 
-      {/* ITERASI GRID KARTU MONITORING JADWAL */}
+      {/* ITERASI GRID KARTU MONITORING JADWAL (Hanya merender currentItems hasil pagination) */}
       <div className="space-y-6">
         {currentItems.map((guru) => (
           <div key={guru.id} className="bg-white rounded-[2.5rem] border-4 border-slate-900 overflow-hidden shadow-[6px_6px_0px_0px_rgba(15,23,42,1)]">
@@ -290,33 +294,45 @@ export default function MonitoringJadwalClient({ initialJadwalGuru, namaSekolah,
         )}
       </div>
 
-      {/* CONTROLS PAGINATION CLIENT-SIDE */}
+      {/* == TAMPILAN KONTROL PAGINATION NEO-BRUTALISME == */}
       {totalPages > 1 && (
-        <div className="flex justify-center items-center gap-4 pt-4">
-          <button 
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage(p => p - 1)}
-            className="p-3 bg-white border-2 border-slate-900 rounded-xl disabled:opacity-20 hover:bg-slate-50 transition-all shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-y-0.5 active:shadow-none"
-          >
-            <ChevronLeft size={16} className="text-slate-900" />
-          </button>
-          
-          <div className="text-center min-w-[125px]">
-            <span className="text-[10px] font-black uppercase text-slate-900 tracking-wider block">
-              Halaman {currentPage} dari {totalPages}
-            </span>
-            <span className="text-[8px] font-bold text-slate-400 uppercase">
-              Total entri: {filteredData.length} Guru
-            </span>
-          </div>
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8 pt-4 border-t-4 border-slate-900">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+            Menampilkan {indexOfFirstItem + 1} - {Math.min(indexOfLastItem, filteredData.length)} Dari {filteredData.length} Guru
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="p-2 rounded-xl border-2 border-slate-900 bg-white hover:bg-slate-100 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-y-0.5 active:shadow-none disabled:opacity-40 disabled:hover:bg-white disabled:active:translate-y-0"
+            >
+              <ChevronLeft size={16} className="text-slate-900" />
+            </button>
+            
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => handlePageChange(page)}
+                  className={`px-3 py-1.5 rounded-xl border-2 border-slate-900 text-xs font-black transition-all ${
+                    currentPage === page
+                      ? "bg-indigo-500 text-white translate-y-0.5 shadow-none"
+                      : "bg-white text-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] hover:bg-slate-100 active:translate-y-0.5 active:shadow-none"
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+            </div>
 
-          <button 
-            disabled={currentPage === totalPages}
-            onClick={() => setCurrentPage(p => p + 1)}
-            className="p-3 bg-white border-2 border-slate-900 rounded-xl disabled:opacity-20 hover:bg-slate-50 transition-all shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-y-0.5 active:shadow-none"
-          >
-            <ChevronRight size={16} className="text-slate-900" />
-          </button>
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="p-2 rounded-xl border-2 border-slate-900 bg-white hover:bg-slate-100 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-y-0.5 active:shadow-none disabled:opacity-40 disabled:hover:bg-white disabled:active:translate-y-0"
+            >
+              <ChevronRight size={16} className="text-slate-900" />
+            </button>
+          </div>
         </div>
       )}
 

@@ -952,6 +952,49 @@ export async function deleteSekolahTotal(sekolahId: number) {
     return { success: false, message: "Gagal menghapus: " + error.message };
   }
 }
+
+export async function cekMapelGuruAtauKepsek(userId: string | number) {
+  try {
+    if (!userId) return false;
+
+    // 1. Ambil guru_id dari tabel users berdasarkan ID Akun yang sedang login
+    const userRes = await sql`
+      SELECT guru_id 
+      FROM users 
+      WHERE id = ${parseInt(userId.toString(), 10)}
+    `;
+
+    // Jika user tidak ditemukan atau tidak punya kaitan ke tabel guru
+    if (!userRes.rows || userRes.rows.length === 0 || !userRes.rows[0].guru_id) {
+      return false;
+    }
+
+    const guruId = userRes.rows[0].guru_id;
+
+    // 2. Ambil data mapel dari tabel guru menggunakan guruId yang asli
+    const guruRes = await sql`
+      SELECT mapel 
+      FROM guru 
+      WHERE id = ${guruId}
+    `;
+
+    if (!guruRes.rows || guruRes.rows.length === 0) {
+      return false;
+    }
+
+    const mapel = guruRes.rows[0].mapel;
+
+    // 3. Cek apakah array mapel ada isinya
+    if (Array.isArray(mapel) && mapel.length > 0) {
+      return true; // Mengajar -> MENU GURU MUNCUL
+    }
+
+    return false; // Tidak mengajar atau [] -> MENU GURU HILANG
+  } catch (error) {
+    console.error("Gagal memeriksa ketersediaan mapel berdasarkan User ID:", error);
+    return false;
+  }
+}
 // -- revisi function yang dibawah --
 // actions.ts
 // Tambahkan async di sini
@@ -2385,28 +2428,33 @@ const dataPieKehadiran = [
       SELECT 
         g.id as guru_id,
         g.nama as guru_nama,
-        g.nip as guru_nip, -- 🌟 Ambil NIP dari database
-        COALESCE(m.nama_mapel, 'Umum') as nama_mapel,
-        -- 1. Hitung total jam pelajaran (JPM) murni tanpa dikali 2 🛠️
+        g.nip as guru_nip,
+        -- 💡 PENYESUAIAN MULTI-MAPEL ARRAY: Ambil semua nama mapel yang ID-nya ada di dalam array g.mapel
+        COALESCE(
+          (
+            SELECT string_agg(m.nama_mapel, ', ') 
+            FROM mapel m 
+            WHERE m.id = ANY(g.mapel)
+          ), 'Umum'
+        ) as nama_mapel,
+        -- 1. Hitung total jam pelajaran (JPM) murni
         (SELECT COUNT(jp.id) FROM jadwal_pelajaran jp WHERE jp.guru_id = g.id) as total_jam,
-        -- 2. Kehadiran riil: jika belum ada absen sama sekali set ke 0% 🛠️
+        -- 2. Kehadiran riil
         COALESCE(
           ROUND(
             (COUNT(CASE WHEN kg.status = 'Hadir' THEN 1 END) * 100.0) / 
             NULLIF(COUNT(kg.id), 0), 1
           ), 0
         ) as persen_kehadiran,
-        -- 3. Logika Kelengkapan Nilai yang Lebih Ketat 🛠️
-        -- Dianggap Lengkap HANYA JIKA guru sudah input nilai di semester Ganjil DAN Genap
+        -- 3. Logika Kelengkapan Nilai
         CASE 
           WHEN (SELECT COUNT(DISTINCT n.semester) FROM nilai n WHERE n.guru_id = g.id) >= 2 THEN 'Lengkap'
           ELSE 'Belum Lengkap'
         END as status_nilai
       FROM guru g
-      LEFT JOIN mapel m ON g.mapel = CAST(m.id AS VARCHAR)
       LEFT JOIN kehadiran_guru kg ON g.id = kg.guru_id
       WHERE g.jenis != 'Kepala Sekolah'
-      GROUP BY g.id, g.nama, g.nip, m.nama_mapel
+      GROUP BY g.id, g.nama, g.nip
       ORDER BY total_jam DESC
     `;
 
@@ -2595,7 +2643,7 @@ const alertSistemRes = await sql`
           semester,
           AVG(NULLIF(nilai_angka, 0)::float) as avg_nilai
         FROM nilai
-        WHERE mapel = '6'
+        WHERE CAST(mapel AS INTEGER) = 6  -- 💡 AMAN: Diubah menjadi komparasi integer numeric
         GROUP BY semester
       ),
       ganjil AS (SELECT avg_nilai FROM nilai_semester WHERE semester = 'Ganjil'),

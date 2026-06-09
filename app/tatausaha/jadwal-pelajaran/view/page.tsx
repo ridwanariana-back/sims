@@ -1,3 +1,4 @@
+// app/tatausaha/jadwal-pelajaran/view/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -315,8 +316,14 @@ export default function ViewJadwalPage() {
                       } else {
                         selectGuru.disabled = false;
                         // Pencarian kecocokan guru berdasarkan ID mapel yang string-nya sama
-                        const guruCocok = allGurus.find(g => g.mapel?.toString() === nextMapelId.toString());
-                        selectGuru.value = guruCocok ? guruCocok.id.toString() : "";
+                       // Cari baris ini di bagian Dropdown Mapel onChange kamu:
+                        const guruCocok = allGurus.find(g => {
+                        if (!g.mapel) return false;
+                        if (Array.isArray(g.mapel)) {
+                          return g.mapel.some((m: any) => m.toString() === nextMapelId.toString());
+                        }
+                        return g.mapel.toString() === nextMapelId.toString();
+                      });selectGuru.value = guruCocok ? guruCocok.id.toString() : "";
                       }
                     }
                   }}
@@ -336,31 +343,43 @@ export default function ViewJadwalPage() {
                 </select>
               </div>
 
-              {/* DROPDOWN GURU */}
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-indigo-600 uppercase ml-2">Guru Pengampu</label>
-                <select 
-                  id="modal_guru_select"
-                  name="guru_id" 
-                  defaultValue={editingItem.guru_id || ""}
-                  disabled={allMapel.find(m => m.id.toString() === modalSelectedMapel)?.kelompok === "Kegiatan"}
-                  className="w-full p-4 bg-indigo-50/50 border-2 border-transparent focus:border-indigo-600 rounded-xl font-bold text-xs outline-none transition-all disabled:opacity-40 disabled:bg-slate-100"
-                >
-                  <option value="">-- Tidak Ada Guru / Kegiatan --</option>
-                  
-                  <optgroup label="GURU MAPEL INI">
-                    {allGurus.filter(g => g.mapel?.toString() === modalSelectedMapel).map(g => (
-                      <option key={g.id} value={g.id}>{g.nama} (NIP: {g.nip || "-"})</option>
-                    ))}
-                  </optgroup>
+              {/* DROPDOWN GURU (BAGIAN OPTGROUP YANG DIPERBAIKI) */}
+<div className="space-y-1">
+  <label className="text-[9px] font-black text-indigo-600 uppercase ml-2">Guru Pengampu</label>
+  <select 
+    id="modal_guru_select"
+    name="guru_id" 
+    defaultValue={editingItem.guru_id || ""}
+    disabled={allMapel.find(m => m.id.toString() === modalSelectedMapel)?.kelompok === "Kegiatan"}
+    className="w-full p-4 bg-indigo-50/50 border-2 border-transparent focus:border-indigo-600 rounded-xl font-bold text-xs outline-none transition-all disabled:opacity-40 disabled:bg-slate-100"
+  >
+    <option value="">-- Tidak Ada Guru / Kegiatan --</option>
+    
+    {/* 💡 REKOMENDASI 1: KELOMPOK GURU YANG MEMANG MENGAMPUL MAPEL INI */}
+    <optgroup label="GURU MAPEL INI">
+      {allGurus
+        .filter(g => {
+          if (!g.mapel) return false;
+          // Pastikan dicari di dalam array baik dalam bentuk Number maupun String
+          if (Array.isArray(g.mapel)) {
+            return g.mapel.some((m: any) => m.toString() === modalSelectedMapel.toString());
+          }
+          // Jaga-jaga jika ada data lama yang bertipe string tunggal
+          return g.mapel.toString() === modalSelectedMapel.toString();
+        })
+        .map(g => (
+          <option key={g.id} value={g.id}>{g.nama} (NIP: {g.nip || "-"})</option>
+        ))}
+    </optgroup>
 
-                  <optgroup label="SEMUA DAFTAR GURU">
-                    {allGurus.map(g => (
-                      <option key={g.id} value={g.id}>{g.nama} (NIP: {g.nip || "-"})</option>
-                    ))}
-                  </optgroup>
-                </select>
-              </div>
+    {/* 💡 REKOMENDASI 2: TETAP SEDIAKAN SEMUA DAFTAR GURU SEBAGAI CADANGAN */}
+   {/* <optgroup label="SEMUA DAFTAR GURU">
+      {allGurus.map(g => (
+        <option key={g.id} value={g.id}>{g.nama} (NIP: {g.nip || "-"})</option>
+      ))}
+    </optgroup>*/}
+  </select>
+</div>
 
               {/* WAKTU EDIT */}
               <div className="grid grid-cols-2 gap-4">
