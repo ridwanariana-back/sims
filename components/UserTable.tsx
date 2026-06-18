@@ -144,6 +144,7 @@ export default function UserTable({ initialData }: { initialData: any[] }) {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex justify-center gap-2">
+                        {/*
                         <button 
                           onClick={() => setEditingUser(user)}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" 
@@ -151,7 +152,7 @@ export default function UserTable({ initialData }: { initialData: any[] }) {
                         >
                           <Edit size={16} />
                         </button>
-
+                       */}   
                         <button 
                           onClick={() => handleReset(user)}
                           className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" 
