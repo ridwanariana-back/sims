@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import MiniAssistant from '@/components/MiniAssistant';
+
 // 1. Impor SessionProvider
 import { SessionProvider } from "next-auth/react";
 import NextTopLoader from "nextjs-toploader";
@@ -45,6 +47,7 @@ export default function RootLayout({
         <SessionProvider>
           {children}
         </SessionProvider>
+        <MiniAssistant />
       </body>
     </html>
   );
